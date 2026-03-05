@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#076653">
+  <title><?= APP_NAME ?></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Charts untuk Sankey Diagram -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <?!= include('ui_CSS'); ?>
+</head>
+<body>
+
+  <!-- ════ STICKY HEADER ════ -->
+  <header class="app-header">
+    <h1>🌿 <?= APP_NAME ?></h1>
+    <div id="header-bulan" class="header-badge">Memuat...</div>
+  </header>
+
+  <!-- ════ MAIN CONTENT ════ -->
+  <main class="max-w-lg mx-auto px-3 pt-3 space-y-3 pb-4">
+
+    <!-- ════ TAB: DASHBOARD ════ -->
+    <section id="content-dashboard" class="tab-content hidden space-y-3">
+
+      <!-- Month selector -->
+      <div class="section-card flex items-center gap-2 py-2.5 px-3">
+        <span class="text-muted text-xs font-bold uppercase tracking-wide whitespace-nowrap">Bulan</span>
+        <select id="dash-month-select" onchange="onDashMonthChange(this.value)"
+          class="flex-1 bg-transparent border-none text-sm font-bold focus:ring-0 focus:outline-none text-primary">
+          <option>Memuat...</option>
+        </select>
+        <button onclick="loadDashboard()" class="text-xs font-bold text-primary bg-soft px-2.5 py-1 rounded-lg">↻</button>
+      </div>
+
+      <div id="dashboard-loader" class="text-center py-10 text-muted">
+        <div class="loading-spinner mx-auto mb-2"></div>
+        <p class="text-xs font-semibold">Memuat data...</p>
+      </div>
+
+      <div id="dashboard-content" class="hidden space-y-3">
+
+        <!-- Hero Balance Card -->
+        <div class="hero-card">
+          <div class="hero-label">Total Saldo Gabungan</div>
+          <div id="dash-saldo" class="hero-amount">Rp –</div>
+          <div class="hero-mini-grid">
+            <div class="hero-mini-card">
+              <div class="hero-mini-label">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" style="color:var(--accent)"><path d="M5 10l7-7 7 7M12 3v18"/></svg>
+                Masuk
+              </div>
+              <div id="dash-income" class="hero-mini-val income">Rp –</div>
+            </div>
+            <div class="hero-mini-card">
+              <div class="hero-mini-label">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24" style="color:#fca5a5"><path d="M19 14l-7 7-7-7M12 21V3"/></svg>
+                Keluar
+              </div>
+              <div id="dash-expense" class="hero-mini-val expense">Rp –</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Surplus + Arisan -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="stat-card">
+            <p class="stat-label">Surplus / Defisit</p>
+            <p id="dash-surplus" class="stat-value">Rp 0</p>
+          </div>
+          <div class="stat-card">
+            <p class="stat-label">Iuran Arisan</p>
+            <p id="dash-arisan" class="stat-value" style="color:#b45309">Rp 0</p>
+          </div>
+        </div>
+
+        <!-- 50/30/20 -->
+        <div class="section-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="section-title mb-0">Metode 50/30/20</p>
+            <span class="badge badge-lime">Budget vs Realisasi</span>
+          </div>
+          <div id="dash-budget5020" class="space-y-3">
+            <p class="text-xs text-muted text-center py-2">Memuat...</p>
+          </div>
+        </div>
+
+        <!-- Sankey Aliran Dana -->
+        <div class="section-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="section-title mb-0">Aliran Dana</p>
+            <button onclick="loadSankey()" class="text-xs font-bold text-primary bg-soft px-2.5 py-1 rounded-lg">↻ Muat</button>
+          </div>
+          <div id="sankey-loader" class="text-center py-6 text-muted text-xs font-semibold">
+            <div class="loading-spinner mx-auto mb-2"></div>Memuat diagram...
+          </div>
+          <div id="sankey-chart-container" class="hidden">
+            <div id="sankey_chart" style="width:100%;height:240px;"></div>
+          </div>
+          <p id="sankey-empty" class="hidden text-center text-xs text-muted py-4">
+            Belum cukup data untuk diagram aliran dana.
+          </p>
+        </div>
+
+        <!-- Saldo Per Akun -->
+        <div class="section-card">
+          <p class="section-title">Saldo Per Akun</p>
+          <div id="dash-akun-list" class="space-y-2"></div>
+        </div>
+
+      </div><!-- /dashboard-content -->
+    </section>
+
+
+    <!-- ════ TAB: TRANSAKSI ════ -->
+    <section id="content-transaksi" class="tab-content hidden space-y-3">
+
+      <div class="section-card flex items-center gap-2 py-2.5 px-3">
+        <span class="text-muted text-xs font-bold uppercase tracking-wide whitespace-nowrap">Bulan</span>
+        <select id="trx-month-select" onchange="onTrxMonthChange(this.value)"
+          class="flex-1 bg-transparent border-none text-sm font-bold focus:ring-0 focus:outline-none text-primary">
+          <option>Memuat...</option>
+        </select>
+      </div>
+
+      <div id="trx-loader" class="text-center py-10 text-muted">
+        <div class="loading-spinner mx-auto mb-2"></div>
+        <p class="text-xs font-semibold">Memuat transaksi...</p>
+      </div>
+
+      <div id="trx-summary" class="hidden grid grid-cols-2 gap-2">
+        <div class="stat-card" style="border-left:4px solid #16a34a">
+          <p class="stat-label" style="color:#16a34a">Pemasukan</p>
+          <p id="trx-sum-income" class="stat-value" style="color:#15803d">Rp 0</p>
+        </div>
+        <div class="stat-card" style="border-left:4px solid #dc2626">
+          <p class="stat-label" style="color:#dc2626">Pengeluaran</p>
+          <p id="trx-sum-expense" class="stat-value" style="color:#b91c1c">Rp 0</p>
+        </div>
+      </div>
+
+      <div id="trx-list" class="hidden space-y-2"></div>
+      <p id="trx-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+        Belum ada transaksi bulan ini.
+      </p>
+
+    </section>
+
+
+    <!-- ════ TAB: BUDGET ════ -->
+    <section id="content-budget" class="tab-content hidden space-y-3">
+
+      <!-- Sub-tab switcher -->
+      <div class="sub-tab-wrap">
+        <button onclick="switchBudgetTab('bulanan')"  id="btab-bulanan"  class="sub-tab-btn">📅 Budget Bulanan</button>
+        <button onclick="switchBudgetTab('template')" id="btab-template" class="sub-tab-btn">📋 Kelola Template</button>
+      </div>
+
+      <!-- SUB-TAB: BUDGET BULANAN -->
+      <div id="bcontent-bulanan" class="space-y-3">
+        <div class="section-card space-y-2">
+          <div class="flex items-center gap-2">
+            <span class="text-muted text-xs font-bold uppercase tracking-wide whitespace-nowrap">Bulan</span>
+            <select id="budget-month-select" onchange="onBudgetMonthChange(this.value)"
+              class="flex-1 bg-transparent border-none text-sm font-bold focus:ring-0 focus:outline-none text-primary">
+              <option>Memuat...</option>
+            </select>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="openAddBudgetItemModal()" class="btn-primary" style="padding:10px 14px;font-size:12px;border-radius:12px;">+ Tambah Item</button>
+            <button onclick="confirmCopyFromTemplate()" class="btn-accent">📋 Salin dari Template</button>
+          </div>
+        </div>
+
+        <div class="info-box">
+          💡 <strong>Metode 50/30/20:</strong> Kebutuhan (50%), Keinginan (30%), Tabungan/Investasi (20%) dari pendapatan.
+        </div>
+
+        <div id="budget-loader" class="text-center py-10 text-muted">
+          <div class="loading-spinner mx-auto mb-2"></div>
+          <p class="text-xs font-semibold">Memuat budget...</p>
+        </div>
+
+        <div id="budget-summary" class="hidden grid grid-cols-3 gap-2">
+          <div class="stat-card" style="border-top:3px solid #1d4ed8">
+            <p class="stat-label" style="color:#1d4ed8">Kebutuhan</p>
+            <p id="budget-sum-kebutuhan" class="stat-value" style="color:#1e40af;font-size:13px">Rp 0</p>
+          </div>
+          <div class="stat-card" style="border-top:3px solid #c2410c">
+            <p class="stat-label" style="color:#c2410c">Keinginan</p>
+            <p id="budget-sum-keinginan" class="stat-value" style="color:#9a3412;font-size:13px">Rp 0</p>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--primary)">
+            <p class="stat-label" style="color:var(--primary)">Tabungan</p>
+            <p id="budget-sum-tabungan" class="stat-value" style="color:var(--primary-dk);font-size:13px">Rp 0</p>
+          </div>
+        </div>
+
+        <div id="budget-list" class="hidden space-y-2"></div>
+        <p id="budget-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+          Belum ada item budget bulan ini.<br>
+          <button onclick="confirmCopyFromTemplate()" class="text-primary underline text-xs mt-2 font-bold">📋 Salin dari Template</button>
+        </p>
+      </div>
+
+      <!-- SUB-TAB: KELOLA TEMPLATE -->
+      <div id="bcontent-template" class="hidden space-y-3">
+        <div class="section-card flex items-center justify-between">
+          <div>
+            <p class="font-bold text-sm" style="color:var(--text)">Template Budget</p>
+            <p class="text-xs text-muted">Acuan untuk salin ke bulan baru</p>
+          </div>
+          <button onclick="openAddTemplateItemModal()" class="btn-accent">+ Tambah</button>
+        </div>
+
+        <div class="info-box">
+          💡 Isi template dengan pengeluaran rutin bulanan. Klik <strong>Salin dari Template</strong> saat membuat budget bulan baru.
+        </div>
+
+        <div id="template-loader" class="text-center py-10 text-muted">
+          <div class="loading-spinner mx-auto mb-2"></div>
+          <p class="text-xs font-semibold">Memuat template...</p>
+        </div>
+
+        <div id="template-summary" class="hidden grid grid-cols-3 gap-2">
+          <div class="stat-card" style="border-top:3px solid #1d4ed8">
+            <p class="stat-label" style="color:#1d4ed8">Kebutuhan</p>
+            <p id="tmpl-sum-kebutuhan" class="stat-value" style="font-size:13px;color:#1e40af">Rp 0</p>
+          </div>
+          <div class="stat-card" style="border-top:3px solid #c2410c">
+            <p class="stat-label" style="color:#c2410c">Keinginan</p>
+            <p id="tmpl-sum-keinginan" class="stat-value" style="font-size:13px;color:#9a3412">Rp 0</p>
+          </div>
+          <div class="stat-card" style="border-top:3px solid var(--primary)">
+            <p class="stat-label" style="color:var(--primary)">Tabungan</p>
+            <p id="tmpl-sum-tabungan" class="stat-value" style="font-size:13px;color:var(--primary-dk)">Rp 0</p>
+          </div>
+        </div>
+
+        <div id="template-list" class="hidden space-y-2"></div>
+        <p id="template-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+          Template masih kosong.<br>
+          <button onclick="openAddTemplateItemModal()" class="text-primary underline text-xs mt-2 font-bold">+ Tambah item pertama</button>
+        </p>
+      </div>
+
+    </section>
+
+
+    <!-- ════ TAB: ARISAN (via Lainnya drawer) ════ -->
+    <section id="content-arisan" class="tab-content hidden space-y-3">
+      <div class="section-card flex items-center justify-between">
+        <div>
+          <p class="font-bold text-sm" style="color:var(--text)">Kelompok Arisan Aktif</p>
+          <p class="text-xs text-muted">Dinonaktifkan tidak ditampilkan</p>
+        </div>
+        <button onclick="openAddArisanModal()" class="btn-accent">🤝 + Daftar</button>
+      </div>
+
+      <div id="arisan-loader" class="text-center py-10 text-muted">
+        <div class="loading-spinner mx-auto mb-2"></div>
+        <p class="text-xs font-semibold">Memuat arisan...</p>
+      </div>
+      <div id="arisan-content" class="hidden space-y-3"></div>
+      <p id="arisan-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+        Tidak ada kelompok arisan aktif.<br>
+        <button onclick="openAddArisanModal()" class="text-primary underline text-xs mt-2 font-bold">+ Daftarkan kelompok baru</button>
+      </p>
+    </section>
+
+
+    <!-- ════ TAB: MASTER (via Lainnya drawer) ════ -->
+    <section id="content-master" class="tab-content hidden space-y-3">
+
+      <div class="sub-tab-wrap">
+        <button onclick="switchMasterTab('kategori')" id="mtab-kategori" class="sub-tab-btn">Kategori</button>
+        <button onclick="switchMasterTab('akun')"     id="mtab-akun"     class="sub-tab-btn">Akun</button>
+        <button onclick="switchMasterTab('saldo')"    id="mtab-saldo"    class="sub-tab-btn">Saldo</button>
+      </div>
+
+      <div id="master-loader" class="text-center py-10 text-muted">
+        <div class="loading-spinner mx-auto mb-2"></div>
+        <p class="text-xs font-semibold">Memuat data master...</p>
+      </div>
+
+      <div id="mcontent-kategori" class="hidden space-y-3">
+        <div class="section-card flex justify-between items-center">
+          <span class="font-bold text-sm" style="color:var(--text)">Daftar Kategori</span>
+          <button onclick="openAddKategoriModal()" class="btn-accent">+ Tambah</button>
+        </div>
+        <div id="master-kategori-list" class="space-y-2"></div>
+      </div>
+
+      <div id="mcontent-akun" class="hidden space-y-3">
+        <div class="section-card flex justify-between items-center">
+          <span class="font-bold text-sm" style="color:var(--text)">Daftar Akun</span>
+          <button onclick="openAddAkunModal()" class="btn-accent">+ Tambah</button>
+        </div>
+        <div id="master-akun-list" class="space-y-2"></div>
+      </div>
+
+      <div id="mcontent-saldo" class="hidden space-y-3">
+        <div class="section-card">
+          <span class="font-bold text-sm" style="color:var(--text)">Saldo Per Akun</span>
+        </div>
+        <div id="master-saldo-list" class="space-y-2"></div>
+      </div>
+
+    </section>
+
+  </main><!-- /main -->
+
+
+  <!-- ════ BOTTOM NAVIGATION ════ -->
+  <nav class="bottom-nav">
+    <button class="nav-btn" id="nav-dashboard" onclick="switchTab('dashboard')">
+      <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Beranda
+    </button>
+
+    <button class="nav-btn" id="nav-transaksi" onclick="switchTab('transaksi')">
+      <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      Transaksi
+    </button>
+
+    <!-- FAB -->
+    <button class="fab" onclick="openAddTransaksiModal()" title="Tambah Transaksi">
+      <svg fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14"/></svg>
+    </button>
+
+    <button class="nav-btn" id="nav-budget" onclick="switchTab('budget')">
+      <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      Budget
+    </button>
+
+    <button class="nav-btn" id="nav-lainnya" onclick="openLainnyaDrawer()">
+      <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+      Lainnya
+    </button>
+  </nav>
+
+
+  <!-- ════ LAINNYA DRAWER ════ -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeLainnyaDrawer()"></div>
+  <div class="drawer" id="lainnya-drawer">
+    <div class="drawer-handle"></div>
+    <p style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;padding:0 4px 12px;">Menu Lainnya</p>
+    <button class="drawer-item w-full" onclick="switchTab('arisan'); closeLainnyaDrawer()">
+      <div class="drawer-item-icon">🤝</div>
+      <div>
+        <p class="font-bold" style="color:var(--text)">Arisan</p>
+        <p class="text-xs text-muted font-medium">Kelola kelompok arisan</p>
+      </div>
+    </button>
+    <button class="drawer-item w-full" onclick="switchTab('master'); closeLainnyaDrawer()">
+      <div class="drawer-item-icon">⚙️</div>
+      <div>
+        <p class="font-bold" style="color:var(--text)">Master Data</p>
+        <p class="text-xs text-muted font-medium">Kategori, akun, saldo</p>
+      </div>
+    </button>
+  </div>
+
+
+  <!-- ════ MODAL (BOTTOM SHEET) ════ -->
+  <div id="modal-overlay" class="fixed inset-0 z-50 hidden items-end">
+    <div class="modal-sheet w-full max-w-lg mx-auto">
+      <div class="modal-drag"></div>
+      <div class="modal-header">
+        <h3 id="modal-title">Form</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div id="modal-body" class="py-4 px-5 space-y-4"></div>
+      <div class="modal-footer">
+        <button onclick="closeModal()" class="btn-secondary" style="border-radius:12px;padding:12px;">Batal</button>
+        <button id="modal-submit-btn" onclick="submitModal()" class="btn-primary" style="border-radius:12px;padding:12px;">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-4 py-2.5 rounded-full shadow-xl hidden z-50 max-w-xs text-center font-bold"></div>
+
+  <?!= include('ui_JS'); ?>
+</body>
+</html>
