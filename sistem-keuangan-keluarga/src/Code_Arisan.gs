@@ -408,17 +408,3 @@ function resetArisanMonthly() {
     return { success: false, message: e.message };
   }
 }
-
-
-// ══════════════════════════════════════════════════════════════
-//  HELPER INTERNAL
-// ══════════════════════════════════════════════════════════════
-
-/**
- * Format angka ke string Rupiah untuk pesan log backend.
- * (Terpisah dari formatRupiah() di frontend JS)
- * @private
- */
-function formatRupiah_(angka) {
-  return 'Rp ' + (parseFloat(angka) || 0).toLocaleString('id-ID');
-}
