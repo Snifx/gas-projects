@@ -1,10 +1,12 @@
 /**
  * MODUL: MAINTENANCE & TRIGGER SETUP
- * Fokus: Schema migration, cache management, trigger automation.
- *
- * v2.0: setupSchema() menambahkan kolom status_aktif ke Master_Akun & Master_Kategori.
- * v2.2: setupSchema() menambahkan kolom id_akun_tujuan dan input_by ke sheet Transaksi
- *       untuk mendukung fitur Transfer Antar Akun dan Multi-User Audit Trail.
+ * v1.1 CHANGES:
+ *   - setupSchema(): tambah kolom baru v1.1
+ *       Master_Akun  → limit_kredit, tgl_cetak_tagihan, tgl_jatuh_tempo
+ *       Transaksi    → id_cicilan
+ *       Saldo_Akun   → sisa_limit (kolom informasi, tidak di-compute oleh sheet)
+ *   - setupSchema(): auto-create sheet Cicilan_Tracking jika belum ada
+ *   - Fungsi lain tidak berubah
  */
 
 // ══════════════════════════════════════════════════════════════
@@ -12,18 +14,20 @@
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Memastikan semua kolom wajib ada di setiap sheet.
+ * Memastikan semua kolom dan sheet wajib ada.
  * Aman dijalankan berulang kali — tidak menghapus data yang ada.
  *
- * Kolom yang dikelola:
- *   Transaksi       → status_hapus    (default: 'N')
- *   Transaksi       → id_akun_tujuan  (default: '')   [v2.2 Transfer]
- *   Transaksi       → input_by        (default: '')   [v2.2 Multi-User]
- *   Arisan_Tracking → status_aktif    (default: 'YA')
- *   Master_Akun     → status_aktif    (default: 'YA')
- *   Master_Kategori → status_aktif    (default: 'YA')
+ * Kolom yang dikelola v1.1:
+ *   Master_Akun        → limit_kredit (0), tgl_cetak_tagihan (0), tgl_jatuh_tempo (0)
+ *   Transaksi          → id_cicilan ('')
+ *   Saldo_Akun         → sisa_limit ('')   [computed di backend, bukan formula sheet]
+ *   Sheet baru         → Cicilan_Tracking  [dibuat jika belum ada]
  *
- * Dipanggil dari menu: Administrasi → Setup Schema
+ * Kolom dari v2.2 (tetap dikelola):
+ *   Transaksi          → status_hapus, id_akun_tujuan, input_by
+ *   Arisan_Tracking    → status_aktif
+ *   Master_Akun        → status_aktif
+ *   Master_Kategori    → status_aktif
  */
 function setupSchema() {
   const ui = SpreadsheetApp.getUi();
@@ -33,27 +37,37 @@ function setupSchema() {
 
     // ── Transaksi ──────────────────────────────────────────────────────────
     log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'status_hapus',   APP_CONFIG.STATUS.AKTIF));
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'id_akun_tujuan', ''));   // v2.2: Transfer
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'input_by',       ''));   // v2.2: Audit trail
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'id_akun_tujuan', ''));   // v2.2
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'input_by',       ''));   // v2.2
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'id_cicilan',     ''));   // v1.1 NEW
+
+    // ── Master_Akun ────────────────────────────────────────────────────────
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'status_aktif',        APP_CONFIG.STATUS.MASTER_AKTIF));
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'limit_kredit',        '0'));   // v1.1 NEW
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'tgl_cetak_tagihan',   '0'));   // v1.1 NEW
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'tgl_jatuh_tempo',     '0'));   // v1.1 NEW
+
+    // ── Saldo_Akun ─────────────────────────────────────────────────────────
+    log.push(_ensureColumn(APP_CONFIG.SHEETS.SALDO, 'sisa_limit', ''));   // v1.1 NEW (informasi saja)
 
     // ── Arisan_Tracking ────────────────────────────────────────────────────
     log.push(_ensureColumn(APP_CONFIG.SHEETS.ARISAN, 'status_aktif', APP_CONFIG.STATUS.ARISAN_AKTIF));
 
-    // ── Master_Akun ────────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'status_aktif', APP_CONFIG.STATUS.MASTER_AKTIF));
-
     // ── Master_Kategori ────────────────────────────────────────────────────
     log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_KATEGORI, 'status_aktif', APP_CONFIG.STATUS.MASTER_AKTIF));
 
-    // Bersihkan semua cache agar headerMap di-regenerasi
+    // ── Cicilan_Tracking (v1.1 NEW — buat sheet jika belum ada) ───────────
+    log.push(_ensureCicilanSheet());
+
+    // Bersihkan cache
     invalidateAllCache();
 
     const summary = log.join('\n');
-    console.log('setupSchema selesai:\n' + summary);
+    console.log('setupSchema v1.1 selesai:\n' + summary);
 
     ui.alert(
-      '✅ Setup Schema v2.2 Selesai',
-      summary + '\n\nCache telah dibersihkan. Fitur Transfer dan Audit Trail siap digunakan.',
+      '✅ Setup Schema v1.1 Selesai',
+      summary + '\n\nCache telah dibersihkan.\nFitur Kartu Kredit & Cicilan siap digunakan.',
       ui.ButtonSet.OK
     );
 
@@ -61,6 +75,57 @@ function setupSchema() {
     console.error('setupSchema error:', e.message, e.stack);
     ui.alert('❌ Error saat Setup Schema', e.message, ui.ButtonSet.OK);
   }
+}
+
+/**
+ * Memastikan sheet Cicilan_Tracking ada dengan header lengkap.
+ * Jika sudah ada → tidak mengubah apapun.
+ * Jika belum ada → buat sheet baru dengan header dan freeze row.
+ * @return {string} Pesan log
+ */
+function _ensureCicilanSheet() {
+  const sheetName = APP_CONFIG.SHEETS.CICILAN;
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
+
+  let sheet = ss.getSheetByName(sheetName);
+  if (sheet) {
+    return `✔ Sheet "${sheetName}" sudah ada.`;
+  }
+
+  // Buat sheet baru
+  sheet = ss.insertSheet(sheetName);
+
+  // Header sesuai schema Cicilan_Tracking
+  const headers = [
+    'id_cicilan',
+    'id_transaksi_awal',
+    'id_akun_kredit',
+    'nama_barang',
+    'total_harga',
+    'tenor_bulan',
+    'cicilan_per_bulan',
+    'sisa_tenor',
+    'total_terbayar',
+    'tgl_jatuh_tempo',
+    'status',
+    'keterangan'
+  ];
+
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  // Format header: bold, background hijau gelap, teks putih
+  const headerRange = sheet.getRange(1, 1, 1, headers.length);
+  headerRange.setFontWeight('bold');
+  headerRange.setBackground('#076653');
+  headerRange.setFontColor('#ffffff');
+
+  // Freeze header row
+  sheet.setFrozenRows(1);
+
+  // Auto-resize kolom
+  sheet.autoResizeColumns(1, headers.length);
+
+  return `➕ Sheet "${sheetName}" berhasil dibuat dengan ${headers.length} kolom.`;
 }
 
 /**
@@ -94,27 +159,21 @@ function _ensureColumn(sheetName, columnName, defaultValue) {
     sheet.getRange(2, newColIndex, lastRow - 1, 1).setValues(defaults);
   }
 
-  return `➕ Kolom "${columnName}" berhasil ditambahkan ke sheet "${sheetName}" (${lastRow - 1} baris diisi "${defaultValue}").`;
+  return `➕ Kolom "${columnName}" ditambahkan ke "${sheetName}" (${lastRow - 1} baris diisi "${defaultValue}").`;
 }
 
 
 // ══════════════════════════════════════════════════════════════
-//  CACHE MANAGEMENT
+//  CACHE MANAGEMENT (tidak berubah)
 // ══════════════════════════════════════════════════════════════
 
 function clearAllAppCache() {
   try {
     invalidateAllCache();
-
     const msg = 'Cache sistem berhasil dibersihkan pada ' + new Date().toLocaleString('id-ID');
     console.log(msg);
-
-    try {
-      SpreadsheetApp.getUi().alert('✅ Cache Dibersihkan', msg, SpreadsheetApp.getUi().ButtonSet.OK);
-    } catch (_) { }
-
+    try { SpreadsheetApp.getUi().alert('✅ Cache Dibersihkan', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (_) {}
     return { success: true, message: msg };
-
   } catch (e) {
     console.error('clearAllAppCache error:', e.message);
     return { success: false, message: e.message };
@@ -123,32 +182,26 @@ function clearAllAppCache() {
 
 
 // ══════════════════════════════════════════════════════════════
-//  TRIGGER SETUP
+//  TRIGGER SETUP (tidak berubah)
 // ══════════════════════════════════════════════════════════════
 
 function setupDailyTriggers() {
   const ui = SpreadsheetApp.getUi();
-
   try {
     const allTriggers = ScriptApp.getProjectTriggers();
     let removed = 0;
     allTriggers.forEach(t => {
       if (t.getHandlerFunction() === 'clearAllAppCache') {
-        ScriptApp.deleteTrigger(t);
-        removed++;
+        ScriptApp.deleteTrigger(t); removed++;
       }
     });
 
     ScriptApp.newTrigger('clearAllAppCache')
-      .timeBased()
-      .everyDays(1)
-      .atHour(0)
-      .create();
+      .timeBased().everyDays(1).atHour(0).create();
 
-    const msg = `Trigger harian berhasil dipasang.\n${removed > 0 ? `${removed} trigger lama dihapus.\n` : ''}Pembersihan cache akan berjalan otomatis tiap hari jam 00:00–01:00.`;
+    const msg = `Trigger harian berhasil dipasang.\n${removed > 0 ? `${removed} trigger lama dihapus.\n` : ''}Cache dibersihkan otomatis tiap hari jam 00:00–01:00.`;
     console.log(msg);
     ui.alert('✅ Trigger Dipasang', msg, ui.ButtonSet.OK);
-
   } catch (e) {
     console.error('setupDailyTriggers error:', e.message);
     ui.alert('❌ Error', 'Gagal memasang trigger: ' + e.message, ui.ButtonSet.OK);
