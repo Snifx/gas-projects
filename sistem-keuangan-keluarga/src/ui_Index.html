@@ -78,6 +78,40 @@
           </div>
         </div>
 
+        <!-- Bill Reminder Banner (hidden, shown by JS when ada tagihan) -->
+        <div id="dash-reminder-banner" class="hidden"></div>
+
+        <!-- Utang Berjalan + DSR (hidden jika tidak ada CC/Paylater) -->
+        <div id="dash-utang-section" class="hidden">
+          <div class="utang-card space-y-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,0.6);">Total Utang Berjalan</p>
+                <p id="dash-total-utang" style="font-size:24px;font-weight:900;letter-spacing:-0.5px;">Rp –</p>
+              </div>
+              <div style="background:rgba(255,255,255,0.1);border-radius:14px;padding:10px 12px;text-align:center;">
+                <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,0.6);">Cicilan/Bulan</p>
+                <p id="dash-cicilan-bulan" style="font-size:14px;font-weight:800;">Rp –</p>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.7);">DSR (Debt Service Ratio)</p>
+                <span id="dash-dsr-badge" style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.15);">0%</span>
+              </div>
+              <div class="dsr-bar-wrap">
+                <div id="dash-dsr-fill" class="dsr-bar-fill dsr-aman" style="width:0%"></div>
+              </div>
+              <p id="dash-dsr-label" style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:4px;">Target DSR &lt; 25% (aman) · &lt; 30% (waspada)</p>
+            </div>
+            <div>
+              <p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.6);margin-bottom:6px;">Beban 6 Bulan ke Depan</p>
+              <div id="dash-fl-bars" class="fl-bar-wrap"></div>
+              <div id="dash-fl-labels" style="display:flex;gap:4px;margin-top:3px;"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- 50/30/20 -->
         <div class="section-card">
           <div class="flex items-center justify-between mb-3">
@@ -312,6 +346,55 @@
 
     </section>
 
+    <!-- ════ TAB: CICILAN (via Lainnya drawer) ════ -->
+    <section id="content-cicilan" class="tab-content hidden space-y-3">
+
+      <!-- Sub-tab switcher -->
+      <div class="sub-tab-wrap">
+        <button onclick="switchCicilanTab('aktif')"   id="ctab-aktif"   class="sub-tab-btn">💳 Cicilan Aktif</button>
+        <button onclick="switchCicilanTab('riwayat')" id="ctab-riwayat" class="sub-tab-btn">📋 Riwayat</button>
+      </div>
+
+      <!-- INFO: Cara kerja -->
+      <div class="info-box">
+        💡 <strong>Cara bayar tagihan:</strong> Pilih cicilan aktif → tap <strong>Bayar Tagihan</strong>. Sistem otomatis catat transfer dari bank ke CC — tidak double-count di budget.
+      </div>
+
+      <div id="cicilan-loader" class="text-center py-10 text-muted">
+        <div class="loading-spinner mx-auto mb-2"></div>
+        <p class="text-xs font-semibold">Memuat cicilan...</p>
+      </div>
+
+      <!-- SUB-TAB: AKTIF -->
+      <div id="ccontent-aktif" class="hidden space-y-3">
+        <!-- Summary strip -->
+        <div id="cicilan-summary" class="hidden grid grid-cols-2 gap-2">
+          <div class="stat-card" style="border-left:4px solid #dc2626">
+            <p class="stat-label" style="color:#dc2626">Total Utang</p>
+            <p id="csum-utang" class="stat-value" style="color:#b91c1c;font-size:14px">Rp 0</p>
+          </div>
+          <div class="stat-card" style="border-left:4px solid #b45309">
+            <p class="stat-label" style="color:#b45309">Cicilan/Bulan</p>
+            <p id="csum-perbulan" class="stat-value" style="color:#92400e;font-size:14px">Rp 0</p>
+          </div>
+        </div>
+        <div id="cicilan-aktif-list" class="space-y-2"></div>
+        <p id="cicilan-aktif-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+          Tidak ada cicilan aktif. 🎉<br>
+          <span class="text-xs">Cicilan terbuat otomatis saat transaksi dengan akun CC/Paylater.</span>
+        </p>
+      </div>
+
+      <!-- SUB-TAB: RIWAYAT (LUNAS) -->
+      <div id="ccontent-riwayat" class="hidden space-y-2">
+        <div id="cicilan-riwayat-list" class="space-y-2"></div>
+        <p id="cicilan-riwayat-empty" class="hidden text-center text-muted py-8 text-sm font-medium">
+          Belum ada cicilan yang lunas.
+        </p>
+      </div>
+
+    </section>
+
   </main><!-- /main -->
 
 
@@ -349,6 +432,13 @@
   <div class="drawer" id="lainnya-drawer">
     <div class="drawer-handle"></div>
     <p style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;padding:0 4px 12px;">Menu Lainnya</p>
+    <button class="drawer-item w-full" onclick="switchTab('cicilan'); closeLainnyaDrawer()">
+      <div class="drawer-item-icon">💳</div>
+      <div>
+        <p class="font-bold" style="color:var(--text)">Cicilan</p>
+        <p class="text-xs text-muted font-medium">Kartu kredit &amp; cicilan aktif</p>
+      </div>
+    </button>
     <button class="drawer-item w-full" onclick="switchTab('arisan'); closeLainnyaDrawer()">
       <div class="drawer-item-icon">🤝</div>
       <div>
