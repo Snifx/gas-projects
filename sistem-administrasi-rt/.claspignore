@@ -1,0 +1,8 @@
+# Abaikan semua file di root proyek agar tidak naik ke Google Script
+**/*
+
+# Kecualikan file di dalam folder src agar TETAP terunggah
+!src/**/*.gs
+!src/**/*.js
+!src/**/*.html
+!appsscript.json
