@@ -1,1 +1,15 @@
+# Dependency folders
+node_modules/
 
+# Clasp configurations (Menyembunyikan Script ID Anda)
+.clasp.json
+
+# Local environment settings
+.env
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# VS Code specific
+.vscode/
