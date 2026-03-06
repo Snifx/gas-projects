@@ -1,0 +1,2309 @@
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  STATE APLIKASI
+// ══════════════════════════════════════════════════════════════════
+const APP_STATE = {
+  currentBulan      : '',
+  currentBudgetBulan: '',
+  currentBudgetTab  : 'bulanan',
+  currentCicilanTab : 'aktif',
+  availableMonths   : [],
+  availableBudgetMonths: [],
+  masterKategori    : [],
+  masterAkun        : [],
+  modalAction       : null,
+  currentTab        : '',
+  currentMasterTab  : 'kategori',
+  cicilanData       : []   // v1.1: cache cicilan list
+};
+
+// ══════════════════════════════════════════════════════════════════
+//  INISIALISASI
+// ══════════════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  const now = new Date();
+  APP_STATE.currentBulan       = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  APP_STATE.currentBudgetBulan = APP_STATE.currentBulan;
+  updateHeaderBulan();
+
+  loadAllMasterData(() => {
+    loadAvailableMonths(() => {
+      loadAvailableBudgetMonths(() => {
+        switchTab('dashboard');
+      });
+    });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  NAVIGASI TAB
+//  FIX: Tambah closing brace } yang hilang setelah navBtn.classList.add('active')
+// ══════════════════════════════════════════════════════════════════
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  // Sync bottom nav (only 3 main tabs have nav buttons)
+  ['dashboard','transaksi','budget'].forEach(t => {
+    const btn = document.getElementById('nav-' + t);
+    if (btn) btn.classList.remove('active');
+  });
+  const lainnyaBtn = document.getElementById('nav-lainnya');
+  if (lainnyaBtn) lainnyaBtn.classList.remove('active');
+
+  document.getElementById('content-' + tabName).classList.remove('hidden');
+  const navBtn = document.getElementById('nav-' + tabName);
+  if (navBtn) {
+    navBtn.classList.add('active');
+  }  // ← FIX: closing brace yang hilang dipindah ke sini
+
+  if (tabName === 'cicilan' || tabName === 'arisan' || tabName === 'master') {
+    if (lainnyaBtn) lainnyaBtn.classList.add('active');
+  }
+
+  APP_STATE.currentTab = tabName;
+
+  if (tabName === 'dashboard') loadDashboard();
+  if (tabName === 'transaksi') loadTransaksi();
+  if (tabName === 'budget') {
+    switchBudgetTab(APP_STATE.currentBudgetTab || 'bulanan');
+    loadBudget();
+  }
+  if (tabName === 'arisan')  loadArisan();
+  if (tabName === 'master')  loadMaster();
+  if (tabName === 'cicilan') loadCicilan();
+}
+
+function openLainnyaDrawer() {
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('lainnya-drawer').classList.add('open');
+}
+function closeLainnyaDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('lainnya-drawer').classList.remove('open');
+}
+
+function switchMasterTab(tabName) {
+  ['kategori','akun','saldo'].forEach(t => {
+    document.getElementById('mcontent-' + t).classList.add('hidden');
+    const b = document.getElementById('mtab-' + t);
+    if (b) b.classList.remove('active');
+  });
+  document.getElementById('mcontent-' + tabName).classList.remove('hidden');
+  const btn = document.getElementById('mtab-' + tabName);
+  if (btn) btn.classList.add('active');
+  APP_STATE.currentMasterTab = tabName;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LOAD MASTER DATA
+// ══════════════════════════════════════════════════════════════════
+function loadAllMasterData(callback) {
+  let done = 0;
+  const check = () => { if (++done === 2 && callback) callback(); };
+
+  google.script.run
+    .withSuccessHandler(res => { if (res.success) APP_STATE.masterKategori = res.data; check(); })
+    .withFailureHandler(() => check())
+    .getMasterKategori();
+
+  google.script.run
+    .withSuccessHandler(res => { if (res.success) APP_STATE.masterAkun = res.data; check(); })
+    .withFailureHandler(() => check())
+    .getMasterAkun();
+}
+
+function loadAvailableMonths(callback) {
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) { APP_STATE.availableMonths = res.data; populateMonthSelects(); }
+      if (callback) callback();
+    })
+    .withFailureHandler(() => { if (callback) callback(); })
+    .getAvailableMonths();
+}
+
+function loadAvailableBudgetMonths(callback) {
+  google.script.run
+    .withSuccessHandler(res => {
+      if (res.success) { APP_STATE.availableBudgetMonths = res.data; populateBudgetMonthSelect(); }
+      if (callback) callback();
+    })
+    .withFailureHandler(() => { if (callback) callback(); })
+    .getAvailableBudgetMonths();
+}
+
+function populateMonthSelects() {
+  const months  = APP_STATE.availableMonths;
+  const options = months.map(m =>
+    `<option value="${m.iso}" ${m.iso === APP_STATE.currentBulan ? 'selected' : ''}>${m.display}</option>`
+  ).join('');
+  ['dash-month-select','trx-month-select'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = options || '<option value="">-- Tidak ada data --</option>';
+  });
+}
+
+function populateBudgetMonthSelect() {
+  const months  = APP_STATE.availableBudgetMonths;
+  const options = months.map(m =>
+    `<option value="${m.iso}" ${m.iso === APP_STATE.currentBudgetBulan ? 'selected' : ''}>${m.display}</option>`
+  ).join('');
+  const el = document.getElementById('budget-month-select');
+  if (el) el.innerHTML = options || '<option value="">-- Tidak ada data --</option>';
+}
+
+function updateHeaderBulan() {
+  const el = document.getElementById('header-bulan');
+  if (el) el.textContent = bulanToDisplay(APP_STATE.currentBulan);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB DASHBOARD
+//  FIX: loadSankey() dipanggil langsung dari sini, BUKAN dari
+//       override renderDashboard (yang menyebabkan infinite recursion)
+// ══════════════════════════════════════════════════════════════════
+function onDashMonthChange(iso) {
+  APP_STATE.currentBulan = iso;
+  updateHeaderBulan();
+  const trxSel = document.getElementById('trx-month-select');
+  if (trxSel) trxSel.value = iso;
+  loadDashboard();
+}
+
+function loadDashboard() {
+  show('dashboard-loader'); hide('dashboard-content');
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('dashboard-loader');
+      if (res.success) {
+        renderDashboard(res.data);
+        show('dashboard-content');
+        // FIX: Panggil loadSankey di sini, bukan lewat override renderDashboard
+        setTimeout(() => loadSankey(), 300);
+      }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { hide('dashboard-loader'); showToast('❌ ' + err.message, 'error'); })
+    .getDashboardData(APP_STATE.currentBulan);
+}
+
+function renderDashboard(data) {
+  const s = data.statistik;
+
+  setText('dash-income',  formatRupiah(s.total_pendapatan));
+  setText('dash-expense', formatRupiah(s.total_pengeluaran));
+  setText('dash-arisan',  formatRupiah(s.total_arisan));
+  setText('dash-saldo',   formatRupiah(s.total_saldo));
+
+  const surplus   = s.surplus_defisit;
+  const elSurplus = document.getElementById('dash-surplus');
+  elSurplus.textContent = formatRupiah(Math.abs(surplus));
+  elSurplus.className   = 'stat-value ' + (surplus >= 0 ? 'text-blue-600' : 'text-red-600');
+
+  // ── v1.1: Utang & DSR ─────────────────────────────────────────────────────
+  const uk = data.utang_kredit;
+  if (uk) {
+    const utangSection = document.getElementById('dash-utang-section');
+    if (uk.total_utang_berjalan > 0 || uk.dsr.cicilan_per_bulan > 0) {
+      utangSection.classList.remove('hidden');
+      setText('dash-total-utang',   formatRupiah(uk.total_utang_berjalan));
+      setText('dash-cicilan-bulan', formatRupiah(uk.dsr.cicilan_per_bulan));
+
+      const dsr    = uk.dsr;
+      const pct    = Math.min(100, dsr.persen);
+      const fillEl = document.getElementById('dash-dsr-fill');
+      fillEl.style.width = pct + '%';
+      fillEl.className   = 'dsr-bar-fill ' +
+        (dsr.status === 'DANGER' ? 'dsr-danger' : dsr.status === 'WARNING' ? 'dsr-warning' : 'dsr-aman');
+
+      const badgeEl = document.getElementById('dash-dsr-badge');
+      badgeEl.textContent    = dsr.persen + '%';
+      badgeEl.style.background = dsr.status === 'DANGER' ? '#fca5a5' : dsr.status === 'WARNING' ? '#fde68a' : 'rgba(255,255,255,0.15)';
+      badgeEl.style.color      = dsr.status === 'DANGER' ? '#7f1d1d' : dsr.status === 'WARNING' ? '#78350f' : '#fff';
+
+      setText('dash-dsr-label',
+        dsr.status === 'DANGER'  ? '⚠️ DSR di atas 30% — pertimbangkan tunda cicilan baru' :
+        dsr.status === 'WARNING' ? '🟡 DSR mendekati 30% — perlu waspada' :
+        'Target DSR < 25% (aman) · < 30% (waspada)');
+
+      const fl      = uk.future_liability || [];
+      const maxBeban = Math.max(...fl.map(f => f.total_beban), 1);
+      const barsEl  = document.getElementById('dash-fl-bars');
+      const labsEl  = document.getElementById('dash-fl-labels');
+      if (barsEl && fl.length) {
+        barsEl.innerHTML = fl.map((f,i) => {
+          const h = Math.round((f.total_beban / maxBeban) * 100);
+          return `<div class="fl-bar" style="height:${h}%;${i===0?'background:rgba(255,255,255,0.35)':''}" title="${f.bulan_label}: ${formatRupiah(f.total_beban)}"></div>`;
+        }).join('');
+        labsEl.innerHTML = fl.map(f =>
+          `<div style="flex:1;text-align:center;font-size:8px;color:rgba(255,255,255,0.5);font-weight:700">${(f.bulan_label||'').substring(0,3)}</div>`
+        ).join('');
+      }
+    } else {
+      utangSection.classList.add('hidden');
+    }
+
+    // Bill Reminder Banner
+    const reminders = uk.bill_reminders || [];
+    const bannerEl  = document.getElementById('dash-reminder-banner');
+    if (bannerEl && reminders.length > 0) {
+      bannerEl.classList.remove('hidden');
+      bannerEl.innerHTML = reminders.map(r => {
+        const isDanger = r.sudah_lewat || r.hari_lagi <= 2;
+        const label    = r.sudah_lewat ? '❗ Sudah lewat!' : r.hari_lagi === 0 ? '🚨 Jatuh tempo hari ini!' : `⏰ ${r.hari_lagi} hari lagi`;
+        return `
+          <div class="reminder-banner ${isDanger?'reminder-banner-danger':''} mb-2">
+            <div class="reminder-icon">💳</div>
+            <div style="flex:1">
+              <p style="font-size:12px;font-weight:800;color:${isDanger?'#9f1239':'#9a3412'}">${label}</p>
+              <p style="font-size:11px;font-weight:600;color:#78350f;margin-top:1px;">Tagihan <strong>${esc(r.nama_akun_kredit)}</strong> — ${formatRupiah(r.cicilan_per_bulan)}</p>
+              <p style="font-size:10px;color:#b45309;margin-top:1px;">${esc(r.nama_barang)} · Jatuh tgl ${esc(r.tgl_display)}</p>
+            </div>
+            <button onclick="openBayarTagihanModal('${esc(r.id_cicilan)}','${esc(r.nama_akun_kredit)}',${r.cicilan_per_bulan})" class="btn-accent" style="padding:7px 10px;font-size:11px;border-radius:10px;flex-shrink:0">Bayar</button>
+          </div>`;
+      }).join('');
+    } else if (bannerEl) {
+      bannerEl.classList.add('hidden');
+    }
+  }
+
+  // Render 50/30/20 Budget vs Realisasi
+  const b = data.budget5020;
+  render5020Dashboard(b, s.total_pendapatan);
+
+  // Saldo Per Akun
+  const akunHtml = (data.akun || []).map(a => {
+    const saldo    = parseFloat(a.saldo_akhir) || 0;
+    const negative = saldo < 0;
+    const badge    = tipeAkunBadge(a.tipe_akun);
+    const limitInfo = a.is_utang && a.limit_kredit > 0
+      ? `<div class="limit-bar-wrap"><div class="limit-bar-fill ${(a.sisa_limit/a.limit_kredit)>0.4?'limit-safe':''}" style="width:${Math.round(((a.limit_kredit-Math.abs(Math.min(saldo,0)))/a.limit_kredit)*100)}%"></div></div>
+         <p style="font-size:9px;color:var(--text-muted);margin-top:2px">Limit tersisa ${formatRupiah(a.sisa_limit)} / ${formatRupiah(a.limit_kredit)}</p>`
+      : '';
+    return `
+      <div class="saldo-row">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="font-semibold text-gray-700 text-xs">${esc(a.nama_akun)}</p>
+            <span class="${badge.cls} badge">${badge.label}</span>
+          </div>
+          <p class="font-bold text-sm ${negative ? 'saldo-akhir-negative' : 'saldo-akhir-positive'}">
+            ${negative ? '-' : ''}${formatRupiah(Math.abs(saldo))}
+          </p>
+        </div>${limitInfo}
+      </div>`;
+  }).join('');
+  document.getElementById('dash-akun-list').innerHTML = akunHtml || '<p class="text-gray-400 text-xs text-center py-2">Tidak ada data akun</p>';
+}
+
+/**
+ * Render bagian Metode 50/30/20 di Dashboard.
+ */
+function render5020Dashboard(b, totalPendapatan) {
+  const hasPendapatan = totalPendapatan > 0;
+
+  const renderItem = (key, label, color, icon) => {
+    const item       = b[key];
+    const budget     = item.budget     || 0;
+    const realisasi  = item.realisasi  || 0;
+    const targetPct  = item.target_pct || 0;
+    const targetNom  = item.target_nom || 0;
+
+    // Progress bar: realisasi vs budget (jika budget ada) atau vs target
+    const baseForBar = budget > 0 ? budget : (targetNom > 0 ? targetNom : 1);
+    const barPct     = Math.min(100, Math.round((realisasi / baseForBar) * 100));
+
+    // Status
+    let statusIcon = '⚪', statusText = 'Belum ada data', statusClass = 'text-gray-400';
+    if (hasPendapatan) {
+      if (budget > 0) {
+        if (realisasi <= budget) {
+          statusIcon = '✅'; statusText = 'Aman'; statusClass = 'text-green-600';
+        } else {
+          statusIcon = '⚠️'; statusText = 'Melebihi Budget'; statusClass = 'text-red-600';
+        }
+      } else {
+        statusIcon = '📋'; statusText = 'Budget belum diatur'; statusClass = 'text-amber-500';
+      }
+    }
+
+    const barColor = realisasi > budget && budget > 0 ? 'bg-red-400' :
+                     realisasi > targetNom             ? 'bg-orange-400' : `bg-${color}-500`;
+
+    return `
+      <div class="border border-gray-100 rounded-xl p-3">
+        <div class="flex justify-between items-center mb-2">
+          <div>
+            <span class="text-sm font-bold text-gray-700">${label}</span>
+            <span class="ml-2 text-xs text-gray-400">Target ${targetPct}%</span>
+          </div>
+          <span class="text-xs font-semibold ${statusClass}">${statusIcon} ${statusText}</span>
+        </div>
+        <div class="w-full bg-gray-100 rounded-full h-2.5 mb-2">
+          <div class="${barColor} h-2.5 rounded-full transition-all" style="width:${barPct}%"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-1 text-center">
+          <div>
+            <p class="text-xs text-gray-400">Target</p>
+            <p class="text-xs font-semibold text-gray-600">${formatRupiah(targetNom)}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Budget</p>
+            <p class="text-xs font-semibold text-indigo-600">${budget > 0 ? formatRupiah(budget) : '-'}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Realisasi</p>
+            <p class="text-xs font-semibold ${realisasi > budget && budget > 0 ? 'text-red-500' : 'text-gray-700'}">${formatRupiah(realisasi)}</p>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  const html = renderItem('kebutuhan', 'Kebutuhan', 'blue',   '🏠') +
+               renderItem('keinginan', 'Keinginan', 'orange', '🛍️') +
+               renderItem('tabungan',  'Tabungan',  'green',  '💰');
+
+  document.getElementById('dash-budget5020').innerHTML = html ||
+    '<p class="text-gray-400 text-xs text-center py-2">Tidak ada data budget</p>';
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB TRANSAKSI
+// ══════════════════════════════════════════════════════════════════
+function onTrxMonthChange(iso) {
+  APP_STATE.currentBulan = iso;
+  updateHeaderBulan();
+  const dashSel = document.getElementById('dash-month-select');
+  if (dashSel) dashSel.value = iso;
+  loadTransaksi();
+}
+
+function loadTransaksi() {
+  show('trx-loader'); hide('trx-summary'); hide('trx-list'); hide('trx-empty');
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('trx-loader');
+      if (res.success) { renderTransaksi(res.data); }
+      else { showToast('❌ ' + res.message, 'error'); show('trx-empty'); }
+    })
+    .withFailureHandler(err => { hide('trx-loader'); showToast('❌ ' + err.message, 'error'); show('trx-empty'); })
+    .getTransaksiByMonth(APP_STATE.currentBulan);
+}
+
+function renderTransaksi(list) {
+  if (!list || list.length === 0) { show('trx-empty'); return; }
+
+  let sumIncome = 0, sumExpense = 0;
+  const katMap  = buildKatMap();
+  const akunMap = buildAkunMap();
+
+  const html = list.map(trx => {
+    const nominal      = parseFloat(trx.jumlah) || 0;
+    const isTransfer   = trx.id_kategori === '_TRANSFER_';
+    const isPemasukan  = trx.tipe === 'PENDAPATAN';
+
+    if (!isTransfer) {
+      if (isPemasukan) sumIncome  += nominal;
+      else             sumExpense += nominal;
+    }
+
+    const katNama  = isTransfer
+      ? (isPemasukan ? '↔ Transfer Masuk' : '↔ Transfer Keluar')
+      : (katMap[trx.id_kategori] || trx.id_kategori || '-');
+    const akunNama = akunMap[trx.id_akun] || trx.id_akun || '-';
+    const tglStr   = formatTanggal(trx.tanggal);
+
+    // Icon class
+    const iconClass = isTransfer ? 'transfer' : (isPemasukan ? 'income' : 'expense');
+    const iconChar  = isTransfer ? '↔' : (isPemasukan ? '↑' : '↓');
+
+    // Amount color
+    const amtClass  = isTransfer
+      ? 'font-bold text-xs'
+      : (isPemasukan ? 'text-green-600 font-bold text-xs' : 'text-red-500 font-bold text-xs');
+    const amtPrefix = isTransfer ? '' : (isPemasukan ? '+' : '-');
+
+    const inputBy = trx.input_by ? `<span class="badge badge-gray">${esc(trx.input_by.split('@')[0])}</span>` : '';
+
+    return `
+      <div class="trx-card">
+        <div class="trx-icon ${iconClass}">${iconChar}</div>
+        <div class="flex-1 min-w-0">
+          <p class="font-bold truncate text-sm" style="color:var(--text)">${esc(trx.deskripsi || katNama)}</p>
+          <p class="text-xs text-muted truncate">${tglStr} · ${esc(katNama)} · ${esc(akunNama)}</p>
+          ${inputBy}
+        </div>
+        <div class="text-right flex-shrink-0">
+          <p class="${amtClass}">${amtPrefix}${formatRupiah(nominal)}</p>
+          <button onclick="confirmDeleteTransaksi('${esc(trx.id_transaksi)}')" class="btn-delete mt-1">✕</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('trx-list').innerHTML = html;
+  setText('trx-sum-income',  formatRupiah(sumIncome));
+  setText('trx-sum-expense', formatRupiah(sumExpense));
+  show('trx-summary'); show('trx-list');
+}
+
+function confirmDeleteTransaksi(id) {
+  if (!confirm(`Hapus transaksi ${id}?\nData tidak benar-benar dihapus (soft delete).`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ Transaksi dihapus.' : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) loadTransaksi();
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deleteTransaksi(id);
+}
+
+function openAddTransaksiModal() {
+  const akunOptions = buildAkunOptions();
+  const today       = new Date().toISOString().split('T')[0];
+
+  document.getElementById('modal-title').textContent = '+ Catat Transaksi';
+  document.getElementById('modal-body').innerHTML = `
+    <!-- Tipe Switcher -->
+    <div>
+      <label class="form-label">Tipe Transaksi</label>
+      <div class="tipe-switcher" id="tipe-switcher">
+        <div class="tipe-btn active" id="tipebtn-PENGELUARAN" onclick="setTipeTrx('PENGELUARAN')">💸 Keluar</div>
+        <div class="tipe-btn"        id="tipebtn-PENDAPATAN"  onclick="setTipeTrx('PENDAPATAN')">💰 Masuk</div>
+        <div class="tipe-btn"        id="tipebtn-TRANSFER"   onclick="setTipeTrx('TRANSFER')">↔️ Transfer</div>
+      </div>
+      <input type="hidden" id="f-tipe" value="PENGELUARAN">
+    </div>
+    <div>
+      <label class="form-label">Tanggal <span class="text-red-400">*</span></label>
+      <input type="date" id="f-tanggal" value="${today}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Jumlah (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="f-jumlah" placeholder="0" min="0" class="form-control" style="font-size:20px;font-weight:800;">
+    </div>
+    <!-- Field untuk PENDAPATAN & PENGELUARAN -->
+    <div id="field-kategori">
+      <label class="form-label">Kategori <span class="text-red-400">*</span></label>
+      <select id="f-kategori" class="form-control">
+        <option value="">-- Pilih Kategori --</option>
+      </select>
+    </div>
+    <div id="field-akun-asal">
+      <label class="form-label" id="label-akun-asal">Akun <span class="text-red-400">*</span></label>
+      <select id="f-akun" class="form-control" onchange="onAkunSelectChange(this)">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <!-- v1.1: Cicilan toggle — muncul otomatis jika akun CC/Paylater + tipe PENGELUARAN -->
+    <div id="field-cicilan" class="hidden cicilan-toggle-wrap">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <p style="font-size:12px;font-weight:800;color:var(--primary)">💳 Cicil pembayaran ini?</p>
+          <p style="font-size:10px;color:var(--text-muted);margin-top:1px">Aktifkan jika ingin bayar bertahap</p>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="f-is-cicilan" onchange="toggleCicilanFields(this.checked)"
+            style="width:18px;height:18px;accent-color:var(--primary)">
+          <span style="font-size:12px;font-weight:700">Cicil</span>
+        </label>
+      </div>
+      <div id="cicilan-fields" class="hidden space-y-3 mt-2">
+        <div>
+          <label class="form-label">Nama Barang / Layanan <span class="text-red-400">*</span></label>
+          <input type="text" id="f-nama-barang" placeholder="Contoh: TV Samsung 43 inch" class="form-control">
+        </div>
+        <div>
+          <label class="form-label">Tenor (Bulan) <span class="text-red-400">*</span></label>
+          <select id="f-tenor" class="form-control">
+            <option value="3">3 bulan</option>
+            <option value="6">6 bulan</option>
+            <option value="12">12 bulan</option>
+            <option value="18">18 bulan</option>
+            <option value="24">24 bulan</option>
+            <option value="36">36 bulan</option>
+          </select>
+        </div>
+        <div id="cicilan-preview" class="hidden" style="background:var(--soft);border-radius:12px;padding:10px 12px;">
+          <p style="font-size:10px;color:var(--text-muted);font-weight:700">ESTIMASI CICILAN/BULAN</p>
+          <p id="cicilan-preview-val" style="font-size:18px;font-weight:900;color:var(--primary)">Rp –</p>
+        </div>
+      </div>
+    </div>
+    <!-- Field khusus TRANSFER -->
+    <div id="field-akun-tujuan" class="hidden">
+      <label class="form-label">Akun Tujuan <span class="text-red-400">*</span></label>
+      <select id="f-akun-tujuan" class="form-control">
+        <option value="">-- Pilih Akun Tujuan --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Deskripsi <span class="text-red-400">*</span></label>
+      <input type="text" id="f-deskripsi" placeholder="Keterangan transaksi" class="form-control">
+    </div>
+    <div id="field-metode">
+      <label class="form-label">Metode Bayar</label>
+      <select id="f-metode" class="form-control">
+        <option value="TUNAI">Tunai</option>
+        <option value="TRANSFER_BANK">Transfer Bank</option>
+        <option value="E-WALLET">E-Wallet</option>
+        <option value="KARTU_DEBIT">Kartu Debit</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Anggota Keluarga</label>
+      <select id="f-anggota" class="form-control">
+        <option value="Suami">Suami</option>
+        <option value="Istri">Istri</option>
+        <option value="Bersama">Bersama</option>
+        <option value="Anak">Anak</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Catatan</label>
+      <input type="text" id="f-catatan" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  // Set kategori default untuk Pengeluaran
+  filterKatByTipe('PENGELUARAN');
+
+  // v1.1: Setup jumlah input listener untuk cicilan preview
+  setTimeout(() => {
+    const jumlahEl = document.getElementById('f-jumlah');
+    const tenorEl  = document.getElementById('f-tenor');
+    if (jumlahEl) jumlahEl.addEventListener('input', updateCicilanPreview);
+    if (tenorEl)  tenorEl.addEventListener('change', updateCicilanPreview);
+  }, 50);
+
+  APP_STATE.modalAction = submitAddTransaksi;
+  openModal();
+}
+
+// v1.1: Deteksi jika akun yang dipilih adalah CC/Paylater → tampilkan opsi cicilan
+function onAkunSelectChange(selectEl) {
+  const selectedOption = selectEl.options[selectEl.selectedIndex];
+  const tipeAkun       = selectedOption ? selectedOption.getAttribute('data-tipe') : '';
+  const isUtang        = ['CREDIT_CARD','PAYLATER'].includes((tipeAkun||'').toUpperCase());
+  const tipe           = document.getElementById('f-tipe') ? document.getElementById('f-tipe').value : '';
+  const fieldCicilan   = document.getElementById('field-cicilan');
+  if (fieldCicilan) {
+    if (isUtang && tipe === 'PENGELUARAN') {
+      fieldCicilan.classList.remove('hidden');
+    } else {
+      fieldCicilan.classList.add('hidden');
+      const cb = document.getElementById('f-is-cicilan');
+      if (cb) cb.checked = false;
+      const cf = document.getElementById('cicilan-fields');
+      if (cf) cf.classList.add('hidden');
+    }
+  }
+}
+
+// v1.1: Toggle cicilan fields saat checkbox dicentang
+function toggleCicilanFields(checked) {
+  const fieldsEl = document.getElementById('cicilan-fields');
+  const wrapEl   = document.getElementById('field-cicilan');
+  if (fieldsEl) fieldsEl.classList.toggle('hidden', !checked);
+  if (wrapEl)   wrapEl.classList.toggle('active', checked);
+  if (checked) updateCicilanPreview();
+}
+
+// v1.1: Update estimasi cicilan per bulan
+function updateCicilanPreview() {
+  const jumlah = parseFloat(document.getElementById('f-jumlah')?.value) || 0;
+  const tenor  = parseInt(document.getElementById('f-tenor')?.value, 10) || 1;
+  const preview = document.getElementById('cicilan-preview');
+  const previewVal = document.getElementById('cicilan-preview-val');
+  if (!preview || !previewVal) return;
+  if (jumlah > 0) {
+    preview.classList.remove('hidden');
+    previewVal.textContent = formatRupiah(Math.round(jumlah / tenor)) + ' / bulan';
+  } else {
+    preview.classList.add('hidden');
+  }
+}
+
+function setTipeTrx(tipe) {
+  // Update hidden input
+  document.getElementById('f-tipe').value = tipe;
+  // Update button styles
+  ['PENGELUARAN','PENDAPATAN','TRANSFER'].forEach(t => {
+    const btn = document.getElementById('tipebtn-' + t);
+    if (btn) btn.classList.toggle('active', t === tipe);
+  });
+
+  const isTransfer = tipe === 'TRANSFER';
+  const elKategori  = document.getElementById('field-kategori');
+  const elAkunTujuan = document.getElementById('field-akun-tujuan');
+  const elLabelAsal  = document.getElementById('label-akun-asal');
+  const elMetode     = document.getElementById('field-metode');
+
+  if (isTransfer) {
+    elKategori.classList.add('hidden');
+    elAkunTujuan.classList.remove('hidden');
+    if (elLabelAsal) elLabelAsal.innerHTML = 'Akun Asal <span class="text-red-400">*</span>';
+    if (elMetode) elMetode.classList.add('hidden');
+    // Hide cicilan for transfer
+    const fc = document.getElementById('field-cicilan');
+    if (fc) fc.classList.add('hidden');
+  } else {
+    elKategori.classList.remove('hidden');
+    elAkunTujuan.classList.add('hidden');
+    if (elLabelAsal) elLabelAsal.innerHTML = 'Akun <span class="text-red-400">*</span>';
+    if (elMetode) elMetode.classList.remove('hidden');
+    filterKatByTipe(tipe);
+    // v1.1: re-check akun to show/hide cicilan toggle
+    const akunSel = document.getElementById('f-akun');
+    if (akunSel && akunSel.value) onAkunSelectChange(akunSel);
+  }
+}
+
+function filterKatByTipe(tipe) {
+  const sel      = document.getElementById('f-kategori');
+  const filtered = APP_STATE.masterKategori.filter(k => !tipe || k.tipe === tipe);
+  sel.innerHTML  = '<option value="">-- Pilih Kategori --</option>' +
+    filtered.map(k => `<option value="${esc(k.id_kategori)}">${esc(k.nama_kategori)}</option>`).join('');
+}
+
+function submitAddTransaksi() {
+  const tipe = val('f-tipe');
+
+  // ── TRANSFER ───────────────────────────────────────────────────────────────
+  if (tipe === 'TRANSFER') {
+    const akunAsalSel  = document.getElementById('f-akun');
+    const akunTujSel   = document.getElementById('f-akun-tujuan');
+    const idAsal       = akunAsalSel ? akunAsalSel.value : '';
+    const idTujuan     = akunTujSel  ? akunTujSel.value  : '';
+    const namaAsal     = akunAsalSel  ? (akunAsalSel.options[akunAsalSel.selectedIndex]?.text  || idAsal)  : idAsal;
+    const namaTujuan   = akunTujSel   ? (akunTujSel.options[akunTujSel.selectedIndex]?.text    || idTujuan) : idTujuan;
+
+    if (!val('f-tanggal'))  { markInvalid('f-tanggal');   showToast('Tanggal wajib diisi.','error');    return; }
+    if (!idAsal)            { markInvalid('f-akun');       showToast('Akun asal wajib dipilih.','error'); return; }
+    if (!idTujuan)          { markInvalid('f-akun-tujuan');showToast('Akun tujuan wajib dipilih.','error'); return; }
+    if (idAsal === idTujuan){ markInvalid('f-akun-tujuan');showToast('Akun asal & tujuan tidak boleh sama.','error'); return; }
+    if (!val('f-jumlah') || parseFloat(val('f-jumlah')) <= 0) { markInvalid('f-jumlah'); showToast('Jumlah harus > 0.','error'); return; }
+
+    const data = {
+      tanggal          : val('f-tanggal'),
+      id_akun_asal     : idAsal,
+      nama_akun_asal   : namaAsal,
+      id_akun_tujuan   : idTujuan,
+      nama_akun_tujuan : namaTujuan,
+      jumlah           : val('f-jumlah'),
+      catatan          : val('f-catatan'),
+      anggota_keluarga : val('f-anggota')
+    };
+
+    setModalLoading(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        setModalLoading(false);
+        if (res.success) {
+          closeModal(); showToast('✅ ' + res.message, 'success');
+          loadTransaksi(); loadAvailableMonths(null);
+        } else showToast('❌ ' + res.message, 'error');
+      })
+      .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+      .addTransfer(data);
+    return;
+  }
+
+  // ── PENDAPATAN / PENGELUARAN ────────────────────────────────────────────────
+  const isCicilan = document.getElementById('f-is-cicilan')?.checked && tipe === 'PENGELUARAN';
+  const data = {
+    tanggal         : val('f-tanggal'),
+    tipe            : tipe,
+    id_kategori     : val('f-kategori'),
+    id_akun         : val('f-akun'),
+    jumlah          : val('f-jumlah'),
+    deskripsi       : val('f-deskripsi'),
+    metode_bayar    : val('f-metode'),
+    anggota_keluarga: val('f-anggota'),
+    catatan         : val('f-catatan'),
+    // v1.1: cicilan params (dikirim hanya jika checkbox aktif)
+    is_cicilan      : isCicilan,
+    nama_barang     : isCicilan ? val('f-nama-barang') : '',
+    tenor_bulan     : isCicilan ? val('f-tenor') : ''
+  };
+
+  // Validasi cicilan
+  if (isCicilan && !data.nama_barang) {
+    markInvalid('f-nama-barang');
+    showToast('Nama barang wajib diisi untuk cicilan.', 'error');
+    return;
+  }
+
+  if (!data.tanggal)     { markInvalid('f-tanggal');  showToast('Tanggal wajib diisi.',    'error'); return; }
+  if (!data.tipe)        {                            showToast('Tipe wajib dipilih.',      'error'); return; }
+  if (!data.id_kategori) { markInvalid('f-kategori'); showToast('Kategori wajib dipilih.', 'error'); return; }
+  if (!data.id_akun)     { markInvalid('f-akun');     showToast('Akun wajib dipilih.',      'error'); return; }
+  if (!data.jumlah || parseFloat(data.jumlah) <= 0) { markInvalid('f-jumlah'); showToast('Jumlah harus > 0.', 'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal(); showToast('✅ ' + res.message, 'success');
+        loadTransaksi(); loadAvailableMonths(null);
+      } else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addTransaksi(data);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB BUDGET
+// ══════════════════════════════════════════════════════════════════
+function switchBudgetTab(tabName) {
+  ['bulanan','template'].forEach(t => {
+    document.getElementById('bcontent-' + t).classList.add('hidden');
+    document.getElementById('btab-' + t).classList.remove('active');
+  });
+  document.getElementById('bcontent-' + tabName).classList.remove('hidden');
+  document.getElementById('btab-' + tabName).classList.add('active');
+  APP_STATE.currentBudgetTab = tabName;
+
+  if (tabName === 'template') loadTemplate();
+}
+
+function onBudgetMonthChange(iso) {
+  APP_STATE.currentBudgetBulan = iso;
+  loadBudget();
+}
+
+function loadBudget() {
+  show('budget-loader');
+  hide('budget-list'); hide('budget-empty'); hide('budget-summary');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('budget-loader');
+      if (res.success) {
+        if (res.data.length === 0) { show('budget-empty'); }
+        else { renderBudget(res.data); show('budget-list'); show('budget-summary'); }
+      } else {
+        showToast('❌ ' + res.message, 'error'); show('budget-empty');
+      }
+    })
+    .withFailureHandler(err => { hide('budget-loader'); showToast('❌ ' + err.message, 'error'); show('budget-empty'); })
+    .getBudgetByMonth(APP_STATE.currentBudgetBulan);
+}
+
+function renderBudget(list) {
+  let sumKebutuhan = 0, sumKeinginan = 0, sumTabungan = 0;
+
+  const html = list.map(b => {
+    const pos    = (b.pos || '').toUpperCase();
+    const budget = parseFloat(b.budget) || 0;
+
+    // Hitung ringkasan
+    if (pos.includes('KEBUTUHAN'))                              sumKebutuhan += budget;
+    else if (pos.includes('KEINGINAN'))                         sumKeinginan += budget;
+    else if (pos.includes('TABUNGAN') || pos.includes('INVESTASI')) sumTabungan += budget;
+
+    const posColor = {
+      KEBUTUHAN: 'badge-blue', KEINGINAN: 'badge-orange',
+      TABUNGAN:  'badge-teal', INVESTASI: 'badge-amber'
+    }[pos] || 'badge-gray';
+
+    return `
+      <div class="master-item">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <p class="font-semibold text-gray-700 text-xs truncate">${esc(b.nama_kategori || b.id_kategori)}</p>
+              <span class="badge ${posColor} flex-shrink-0">${esc(pos || '-')}</span>
+            </div>
+            <p class="text-xs text-gray-400">${esc(b.id_kategori)}${b.keterangan ? ' · ' + esc(b.keterangan) : ''}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <p class="font-bold text-gray-800 text-sm">${formatRupiah(budget)}</p>
+          <button onclick="openEditBudgetModal('${esc(b.id_kategori)}', '${esc(b.nama_kategori)}', ${budget}, '${esc(b.keterangan || '')}')"
+            class="text-indigo-500 hover:text-indigo-700 text-xs px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50">Edit</button>
+          <button onclick="confirmDeleteBudgetItem('${esc(b.id_kategori)}', '${esc(b.nama_kategori)}')"
+            class="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded border border-red-200 hover:bg-red-50">Hapus</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('budget-list').innerHTML = html;
+  setText('budget-sum-kebutuhan', formatRupiah(sumKebutuhan));
+  setText('budget-sum-keinginan', formatRupiah(sumKeinginan));
+  setText('budget-sum-tabungan',  formatRupiah(sumTabungan));
+}
+
+function openAddBudgetItemModal() {
+  const bulan = APP_STATE.currentBudgetBulan;
+  // Buat opsi kategori berdasarkan master (hanya PENGELUARAN)
+  const pengeluaranKat = APP_STATE.masterKategori.filter(k => k.tipe === 'PENGELUARAN');
+  const katOptions = pengeluaranKat.map(k =>
+    `<option value="${esc(k.id_kategori)}" data-pos="${esc(k.pos || '')}" data-nama="${esc(k.nama_kategori)}">${esc(k.nama_kategori)} (${esc(k.pos || '-')})</option>`
+  ).join('');
+
+  document.getElementById('modal-title').textContent = '+ Tambah Item Budget';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-2 text-xs text-indigo-700">
+      Menambah budget untuk <strong>${bulanToDisplay(bulan)}</strong>
+    </div>
+    <div>
+      <label class="form-label">Kategori <span class="text-red-400">*</span></label>
+      <select id="fb-kategori" class="form-control">
+        <option value="">-- Pilih Kategori --</option>
+        ${katOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Nominal Budget (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="fb-budget" placeholder="0" min="0" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fb-ket" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = submitAddBudgetItem;
+  openModal();
+}
+
+function submitAddBudgetItem() {
+  const bulan    = APP_STATE.currentBudgetBulan;
+  const katSel   = document.getElementById('fb-kategori');
+  const idKat    = katSel ? katSel.value : '';
+  const selOpt   = katSel ? katSel.options[katSel.selectedIndex] : null;
+  const namaKat  = selOpt ? (selOpt.getAttribute('data-nama') || '') : '';
+  const posKat   = selOpt ? (selOpt.getAttribute('data-pos')  || '') : '';
+  const budget   = val('fb-budget');
+  const ket      = val('fb-ket');
+
+  if (!idKat)  { markInvalid('fb-kategori'); showToast('Kategori wajib dipilih.', 'error'); return; }
+  if (!budget || parseFloat(budget) < 0) { markInvalid('fb-budget'); showToast('Budget tidak boleh kosong atau negatif.', 'error'); return; }
+
+  const data = {
+    bulan        : bulan,
+    id_kategori  : idKat,
+    nama_kategori: namaKat,
+    pos          : posKat,
+    budget       : budget,
+    keterangan   : ket
+  };
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal(); showToast('✅ ' + res.message, 'success');
+        loadBudget(); loadAvailableBudgetMonths(null);
+      } else { showToast('❌ ' + res.message, 'error'); }
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addBudgetItem(data);
+}
+
+function openEditBudgetModal(idKategori, namaKategori, currentBudget, currentKet) {
+  document.getElementById('modal-title').textContent = '✏️ Edit Budget: ' + namaKategori;
+  document.getElementById('modal-body').innerHTML = `
+    <div>
+      <label class="form-label">Nominal Budget (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="fe-budget" value="${currentBudget}" min="0" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fe-ket" value="${esc(currentKet)}" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = () => {
+    const budget = val('fe-budget');
+    const ket    = val('fe-ket');
+    if (budget === '' || parseFloat(budget) < 0) { markInvalid('fe-budget'); showToast('Budget tidak valid.', 'error'); return; }
+
+    setModalLoading(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        setModalLoading(false);
+        if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadBudget(); }
+        else showToast('❌ ' + res.message, 'error');
+      })
+      .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+      .updateBudgetItem(APP_STATE.currentBudgetBulan, idKategori, { budget, keterangan: ket });
+  };
+  openModal();
+}
+
+function confirmDeleteBudgetItem(idKategori, namaKategori) {
+  if (!confirm(`Hapus budget untuk "${namaKategori}" dari bulan ${bulanToDisplay(APP_STATE.currentBudgetBulan)}?`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) loadBudget();
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deleteBudgetItem(APP_STATE.currentBudgetBulan, idKategori);
+}
+
+function confirmCopyFromTemplate() {
+  const bulan = APP_STATE.currentBudgetBulan;
+  if (!confirm(`Salin semua item dari Budget_Template ke ${bulanToDisplay(bulan)}?\n\nItem yang sudah ada di bulan ini akan dilewati (tidak ditimpa).`)) return;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadBudget(); loadAvailableBudgetMonths(null); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .copyBudgetFromTemplate(bulan);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SUB-TAB: KELOLA TEMPLATE
+// ══════════════════════════════════════════════════════════════════
+function loadTemplate() {
+  show('template-loader');
+  hide('template-list'); hide('template-empty'); hide('template-summary');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('template-loader');
+      if (res.success) {
+        if (res.data.length === 0) { show('template-empty'); }
+        else { renderTemplate(res.data); show('template-list'); show('template-summary'); }
+      } else {
+        showToast('❌ ' + res.message, 'error'); show('template-empty');
+      }
+    })
+    .withFailureHandler(err => { hide('template-loader'); showToast('❌ ' + err.message, 'error'); show('template-empty'); })
+    .getBudgetTemplate();
+}
+
+function renderTemplate(list) {
+  let sumKebutuhan = 0, sumKeinginan = 0, sumTabungan = 0;
+
+  // Kelompokkan per pos
+  const groups = {};
+  list.forEach(t => {
+    const pos = (t.pos || 'LAINNYA').toUpperCase();
+    if (!groups[pos]) groups[pos] = [];
+    groups[pos].push(t);
+
+    const budget = parseFloat(t.budget) || 0;
+    if (pos.includes('KEBUTUHAN'))                              sumKebutuhan += budget;
+    else if (pos.includes('KEINGINAN'))                         sumKeinginan += budget;
+    else if (pos.includes('TABUNGAN') || pos.includes('INVESTASI')) sumTabungan += budget;
+  });
+
+  const posOrder   = ['KEBUTUHAN','KEINGINAN','TABUNGAN','INVESTASI','SOSIAL','UTANG','ARISAN','LAINNYA','PENDAPATAN_RUTIN','PENDAPATAN_LAINNYA'];
+  const posColor   = { KEBUTUHAN:'badge-blue', KEINGINAN:'badge-orange', TABUNGAN:'badge-teal', INVESTASI:'badge-amber' };
+  const sortedKeys = [...new Set([...posOrder, ...Object.keys(groups)])].filter(k => groups[k]);
+
+  let html = '';
+  sortedKeys.forEach(pos => {
+    if (!groups[pos]) return;
+    const color = posColor[pos] || 'badge-gray';
+    html += `<p class="text-xs font-bold text-gray-500 uppercase px-1 mt-3 mb-1">${pos}</p>`;
+    html += groups[pos].map(t => {
+      const budget = parseFloat(t.budget) || 0;
+      const tahun  = (t.tahun || '').toString();
+      return `
+        <div class="master-item">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
+            <span class="badge badge-gray font-mono">${esc(t.id_kategori)}</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-700 text-xs truncate">${esc(t.nama_kategori || t.id_kategori)}</p>
+              <p class="text-xs text-gray-400">${esc(pos)}${tahun ? ' · ' + tahun : ''}${t.keterangan ? ' · ' + esc(t.keterangan) : ''}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <p class="font-bold text-gray-800 text-sm">${formatRupiah(budget)}</p>
+            <button onclick="openEditTemplateItemModal('${esc(t.id_kategori)}', '${esc(t.nama_kategori)}', ${budget}, '${esc(t.keterangan || '')}', '${esc(tahun)}')"
+              class="text-indigo-500 hover:text-indigo-700 text-xs px-1.5 py-1 rounded border border-indigo-200 hover:bg-indigo-50">✏️</button>
+            <button onclick="confirmDeleteTemplateItem('${esc(t.id_kategori)}', '${esc(t.nama_kategori)}', '${esc(tahun)}')"
+              class="text-red-400 hover:text-red-600 text-xs px-1.5 py-1 rounded border border-red-200 hover:bg-red-50">🗑️</button>
+          </div>
+        </div>`;
+    }).join('');
+  });
+
+  document.getElementById('template-list').innerHTML = html;
+  setText('tmpl-sum-kebutuhan', formatRupiah(sumKebutuhan));
+  setText('tmpl-sum-keinginan', formatRupiah(sumKeinginan));
+  setText('tmpl-sum-tabungan',  formatRupiah(sumTabungan));
+}
+
+function openAddTemplateItemModal() {
+  const pengeluaranKat = APP_STATE.masterKategori.filter(k => k.tipe === 'PENGELUARAN');
+  const katOptions = pengeluaranKat.map(k =>
+    `<option value="${esc(k.id_kategori)}" data-pos="${esc(k.pos || '')}" data-nama="${esc(k.nama_kategori)}">${esc(k.nama_kategori)} (${esc(k.pos || '-')})</option>`
+  ).join('');
+
+  const tahunIni = new Date().getFullYear();
+
+  document.getElementById('modal-title').textContent = '+ Tambah Item Template';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-teal-50 border border-teal-100 rounded-lg p-2 text-xs text-teal-700">
+      Item ini akan menjadi acuan dasar saat menyalin ke bulan baru.
+    </div>
+    <div>
+      <label class="form-label">Kategori <span class="text-red-400">*</span></label>
+      <select id="ft-kategori" class="form-control">
+        <option value="">-- Pilih Kategori --</option>
+        ${katOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Nominal Budget (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="ft-budget" placeholder="0" min="0" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tahun</label>
+      <input type="number" id="ft-tahun" value="${tahunIni}" placeholder="Contoh: 2026" class="form-control">
+      <p class="text-xs text-gray-400 mt-1">Berguna untuk forecasting keuangan per tahun</p>
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="ft-ket" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = submitAddTemplateItem;
+  openModal();
+}
+
+function submitAddTemplateItem() {
+  const katSel  = document.getElementById('ft-kategori');
+  const idKat   = katSel ? katSel.value : '';
+  const selOpt  = katSel ? katSel.options[katSel.selectedIndex] : null;
+  const namaKat = selOpt ? (selOpt.getAttribute('data-nama') || '') : '';
+  const posKat  = selOpt ? (selOpt.getAttribute('data-pos')  || '') : '';
+  const budget  = val('ft-budget');
+  const tahun   = val('ft-tahun');
+  const ket     = val('ft-ket');
+
+  if (!idKat)  { markInvalid('ft-kategori'); showToast('Kategori wajib dipilih.', 'error'); return; }
+  if (!budget || parseFloat(budget) < 0) { markInvalid('ft-budget'); showToast('Budget tidak boleh kosong atau negatif.', 'error'); return; }
+
+  const data = {
+    id_kategori  : idKat,
+    nama_kategori: namaKat,
+    pos          : posKat,
+    budget       : budget,
+    tahun        : tahun,
+    keterangan   : ket
+  };
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadTemplate(); }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addBudgetTemplateItem(data);
+}
+
+function openEditTemplateItemModal(idKategori, namaKategori, currentBudget, currentKet, currentTahun) {
+  document.getElementById('modal-title').textContent = '✏️ Edit Template: ' + namaKategori;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs text-gray-500">
+      Kategori: <strong>${esc(namaKategori)}</strong> (${esc(idKategori)})
+    </div>
+    <div>
+      <label class="form-label">Nominal Budget (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="fet-budget" value="${currentBudget}" min="0" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tahun</label>
+      <input type="number" id="fet-tahun" value="${esc(currentTahun)}" placeholder="Contoh: 2026" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fet-ket" value="${esc(currentKet)}" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = () => {
+    const budget = val('fet-budget');
+    const tahun  = val('fet-tahun');
+    const ket    = val('fet-ket');
+    if (budget === '' || parseFloat(budget) < 0) { markInvalid('fet-budget'); showToast('Budget tidak valid.', 'error'); return; }
+
+    setModalLoading(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        setModalLoading(false);
+        if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadTemplate(); }
+        else showToast('❌ ' + res.message, 'error');
+      })
+      .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+      .updateBudgetTemplateItem(idKategori, currentTahun, { budget, tahun, keterangan: ket });
+  };
+  openModal();
+}
+
+function confirmDeleteTemplateItem(idKategori, namaKategori, tahun) {
+  if (!confirm(`Hapus "${namaKategori}" dari template${tahun ? ' tahun ' + tahun : ''}?\n\nBudget bulan-bulan yang sudah ada tidak terpengaruh.`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) loadTemplate();
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deleteBudgetTemplateItem(idKategori, tahun);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB ARISAN
+// ══════════════════════════════════════════════════════════════════
+function loadArisan() {
+  show('arisan-loader'); hide('arisan-content'); hide('arisan-empty');
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('arisan-loader');
+      if (res.success) {
+        if (res.data.length === 0) { show('arisan-empty'); }
+        else { renderArisan(res.data); show('arisan-content'); }
+      } else { showToast('❌ ' + res.message, 'error'); show('arisan-empty'); }
+    })
+    .withFailureHandler(err => { hide('arisan-loader'); showToast('❌ ' + err.message, 'error'); show('arisan-empty'); })
+    .getArisanList();
+}
+
+function renderArisan(list) {
+  const html = list.map(ar => {
+    const statusBayar = (ar.status_bayar_bulan_ini || 'BELUM').toUpperCase();
+    const statusDapat = (ar.sudah_dapat_giliran    || 'BELUM').toUpperCase();
+    const sudahBayar  = statusBayar === 'SUDAH';
+    const sudahDapat  = statusDapat === 'YA';
+    const total       = (ar.jumlah_iuran || 0) * (ar.jumlah_anggota || 0);
+
+    return `
+      <div class="arisan-card">
+        <div class="flex justify-between items-start mb-3">
+          <div class="flex-1 min-w-0">
+            <p class="font-bold text-gray-800 truncate">${esc(ar.nama_kelompok)}</p>
+            <p class="text-xs text-gray-400 mt-0.5">
+              ${esc(ar.id_arisan)} · ${ar.periode || 'BULANAN'} · ${ar.jumlah_anggota || 0} peserta
+            </p>
+          </div>
+          <span class="badge ${sudahDapat ? 'badge-violet' : 'badge-gray'} ml-2 flex-shrink-0">
+            ${sudahDapat ? '✓ Sudah Terima' : 'Belum Terima'}
+          </span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mb-3">
+          <div class="bg-gray-50 rounded-lg p-2 text-center">
+            <p class="text-xs text-gray-400">Iuran</p>
+            <p class="font-bold text-gray-700 text-xs">${formatRupiah(ar.jumlah_iuran)}</p>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-2 text-center">
+            <p class="text-xs text-gray-400">Total Pot</p>
+            <p class="font-bold text-gray-700 text-xs">${formatRupiah(total)}</p>
+          </div>
+          <div class="bg-gray-50 rounded-lg p-2 text-center">
+            <p class="text-xs text-gray-400">Tgl Setor</p>
+            <p class="font-bold text-gray-700 text-xs">Tgl ${ar.tanggal_setor || '-'}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 mb-3 px-2 py-1.5 rounded-lg ${sudahBayar ? 'bg-green-50' : 'bg-amber-50'}">
+          <span class="text-sm">${sudahBayar ? '✅' : '⏳'}</span>
+          <p class="text-xs font-medium ${sudahBayar ? 'text-green-700' : 'text-amber-700'}">
+            Iuran bulan ini: <strong>${sudahBayar ? 'Sudah Dibayar' : 'Belum Dibayar'}</strong>
+          </p>
+        </div>
+        <div class="flex gap-2 mb-2">
+          <button
+            onclick="openBayarArisanModal('${esc(ar.id_arisan)}', '${esc(ar.nama_kelompok)}')"
+            ${sudahBayar ? 'disabled' : ''}
+            class="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors
+              ${sudahBayar ? 'bg-green-50 border-green-200 text-green-600 cursor-default' : 'bg-white border-indigo-300 text-indigo-600 hover:bg-indigo-50'}">
+            ${sudahBayar ? '✓ Sudah Bayar' : '💳 Bayar Iuran'}
+          </button>
+          <button
+            onclick="openTerimaArisanModal('${esc(ar.id_arisan)}', '${esc(ar.nama_kelompok)}', ${ar.jumlah_iuran}, ${ar.jumlah_anggota})"
+            ${sudahDapat ? 'disabled' : ''}
+            class="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors
+              ${sudahDapat ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-default' : 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'}">
+            ${sudahDapat ? '✓ Sudah Terima' : '🎉 Terima Giliran'}
+          </button>
+        </div>
+        <button
+          onclick="confirmDeactivateArisan('${esc(ar.id_arisan)}', '${esc(ar.nama_kelompok)}')"
+          class="w-full py-1.5 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg border border-gray-100 hover:border-red-200 transition-colors">
+          ✕ Nonaktifkan Kelompok Ini
+        </button>
+      </div>`;
+  }).join('');
+
+  document.getElementById('arisan-content').innerHTML = html;
+}
+
+function openAddArisanModal() {
+  document.getElementById('modal-title').textContent = '🤝 Daftar Kelompok Arisan Baru';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-700">
+      ID arisan akan dibuat otomatis (AR003, AR004, dst).
+    </div>
+    <div>
+      <label class="form-label">Nama Kelompok Arisan <span class="text-red-400">*</span></label>
+      <input type="text" id="nar-nama" placeholder="Contoh: Arisan RT 07" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Nominal Iuran per Periode (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="nar-iuran" placeholder="Contoh: 500000" min="1" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Jumlah Peserta <span class="text-red-400">*</span></label>
+      <input type="number" id="nar-anggota" placeholder="Contoh: 10" min="1" class="form-control">
+      <p class="text-xs text-gray-400 mt-1">Total pot arisan: <span id="nar-total-pot">Rp 0</span></p>
+    </div>
+    <div>
+      <label class="form-label">Periode <span class="text-red-400">*</span></label>
+      <select id="nar-periode" class="form-control">
+        <option value="BULANAN">Bulanan</option>
+        <option value="MINGGUAN">Mingguan</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Tanggal Rutin Setor <span class="text-red-400">*</span></label>
+      <input type="number" id="nar-tanggal-setor" placeholder="Tanggal (1–31), misal: 20" min="1" max="31" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="nar-ket" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  const updatePot = () => {
+    const iuran   = parseFloat(document.getElementById('nar-iuran')?.value)   || 0;
+    const anggota = parseFloat(document.getElementById('nar-anggota')?.value) || 0;
+    const el      = document.getElementById('nar-total-pot');
+    if (el) el.textContent = formatRupiah(iuran * anggota);
+  };
+  setTimeout(() => {
+    document.getElementById('nar-iuran')?.addEventListener('input', updatePot);
+    document.getElementById('nar-anggota')?.addEventListener('input', updatePot);
+  }, 100);
+
+  APP_STATE.modalAction = submitAddArisan;
+  openModal();
+}
+
+function submitAddArisan() {
+  const data = {
+    nama_kelompok  : val('nar-nama'),
+    jumlah_iuran   : val('nar-iuran'),
+    jumlah_anggota : val('nar-anggota'),
+    periode        : val('nar-periode'),
+    tanggal_setor  : val('nar-tanggal-setor'),
+    keterangan     : val('nar-ket')
+  };
+
+  if (!data.nama_kelompok)   { markInvalid('nar-nama');         showToast('Nama kelompok wajib diisi.', 'error'); return; }
+  if (!data.jumlah_iuran || parseFloat(data.jumlah_iuran) <= 0) { markInvalid('nar-iuran'); showToast('Nominal iuran harus > 0.', 'error'); return; }
+  if (!data.jumlah_anggota || parseInt(data.jumlah_anggota) <= 0) { markInvalid('nar-anggota'); showToast('Jumlah anggota harus > 0.', 'error'); return; }
+  if (!data.tanggal_setor)   { markInvalid('nar-tanggal-setor'); showToast('Tanggal setor wajib diisi.', 'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadArisan(); }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addArisan(data);
+}
+
+function confirmDeactivateArisan(idArisan, namaKelompok) {
+  if (!confirm(
+    `Nonaktifkan kelompok "${namaKelompok}"?\n\n` +
+    `Data historis tetap tersimpan.\n` +
+    `Kelompok ini tidak akan muncul lagi di daftar aktif.`
+  )) return;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) loadArisan();
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deactivateArisan(idArisan);
+}
+
+function openBayarArisanModal(idArisan, namaKelompok) {
+  const akunOptions = buildAkunOptions();
+  const today       = new Date().toISOString().split('T')[0];
+
+  document.getElementById('modal-title').textContent = `💳 Bayar Iuran: ${namaKelompok}`;
+  document.getElementById('modal-body').innerHTML = `
+    <p class="text-xs text-gray-500 bg-blue-50 p-2 rounded-lg">Iuran arisan akan dicatat sebagai pengeluaran.</p>
+    <div>
+      <label class="form-label">Tanggal Bayar <span class="text-red-400">*</span></label>
+      <input type="date" id="ar-tanggal" value="${today}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Dari Akun <span class="text-red-400">*</span></label>
+      <select id="ar-akun" class="form-control">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Anggota Keluarga</label>
+      <select id="ar-anggota" class="form-control">
+        <option value="Istri">Istri</option>
+        <option value="Suami">Suami</option>
+        <option value="Bersama">Bersama</option>
+      </select>
+    </div>`;
+
+  APP_STATE.modalAction = () => submitBayarArisan(idArisan);
+  openModal();
+}
+
+function submitBayarArisan(idArisan) {
+  const tanggal = val('ar-tanggal');
+  const idAkun  = val('ar-akun');
+  const anggota = val('ar-anggota');
+  if (!tanggal) { markInvalid('ar-tanggal'); showToast('Tanggal wajib diisi.', 'error'); return; }
+  if (!idAkun)  { markInvalid('ar-akun');    showToast('Akun wajib dipilih.',  'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadArisan(); }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .bayarIuranArisan(idArisan, tanggal, idAkun, anggota);
+}
+
+function openTerimaArisanModal(idArisan, namaKelompok, nominalIuran, jumlahAnggota) {
+  const akunOptions = buildAkunOptions();
+  const today       = new Date().toISOString().split('T')[0];
+  const total       = (nominalIuran || 0) * (jumlahAnggota || 0);
+
+  document.getElementById('modal-title').textContent = `🎉 Terima Giliran: ${namaKelompok}`;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-green-50 p-3 rounded-xl text-center">
+      <p class="text-xs text-green-600 font-medium">Total Dana yang Diterima</p>
+      <p class="text-xl font-bold text-green-700 mt-1">${formatRupiah(total)}</p>
+      <p class="text-xs text-green-500 mt-1">${formatRupiah(nominalIuran)} × ${jumlahAnggota} peserta</p>
+    </div>
+    <div>
+      <label class="form-label">Tanggal Terima <span class="text-red-400">*</span></label>
+      <input type="date" id="at-tanggal" value="${today}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Masuk ke Akun <span class="text-red-400">*</span></label>
+      <select id="at-akun" class="form-control">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Penerima</label>
+      <select id="at-anggota" class="form-control">
+        <option value="Istri">Istri</option>
+        <option value="Suami">Suami</option>
+        <option value="Bersama">Bersama</option>
+      </select>
+    </div>`;
+
+  APP_STATE.modalAction = () => submitTerimaArisan(idArisan);
+  openModal();
+}
+
+function submitTerimaArisan(idArisan) {
+  const tanggal = val('at-tanggal');
+  const idAkun  = val('at-akun');
+  const anggota = val('at-anggota');
+  if (!tanggal) { markInvalid('at-tanggal'); showToast('Tanggal wajib diisi.', 'error'); return; }
+  if (!idAkun)  { markInvalid('at-akun');    showToast('Akun wajib dipilih.',  'error'); return; }
+  if (!confirm('Konfirmasi: Anda yakin ingin mencatat penerimaan giliran arisan ini?')) return;
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadArisan(); }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .terimaArisan(idArisan, tanggal, idAkun, anggota);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB MASTER
+// ══════════════════════════════════════════════════════════════════
+function loadMaster() {
+  show('master-loader');
+  ['kategori','akun','saldo'].forEach(t => {
+    hide('mcontent-' + t);
+    document.getElementById('mtab-' + t).classList.remove('active');
+  });
+
+  let done = 0;
+  const check = () => { if (++done === 3) { hide('master-loader'); switchMasterTab(APP_STATE.currentMasterTab); } };
+
+  google.script.run
+    .withSuccessHandler(res => { if (res.success) { APP_STATE.masterKategori = res.data; renderMasterKategori(res.data); } check(); })
+    .withFailureHandler(() => check())
+    .getMasterKategori();
+
+  google.script.run
+    .withSuccessHandler(res => { if (res.success) { APP_STATE.masterAkun = res.data; renderMasterAkun(res.data); } check(); })
+    .withFailureHandler(() => check())
+    .getMasterAkun();
+
+  google.script.run
+    .withSuccessHandler(res => { if (res.success) renderMasterSaldo(res.data); check(); })
+    .withFailureHandler(() => check())
+    .getMasterSaldoAkun();
+}
+
+function renderMasterKategori(list) {
+  if (!list || list.length === 0) {
+    document.getElementById('master-kategori-list').innerHTML = '<p class="text-gray-400 text-center py-4 text-xs">Belum ada kategori.</p>';
+    return;
+  }
+  const groups = {};
+  list.forEach(k => { const t = k.tipe || 'LAINNYA'; if (!groups[t]) groups[t] = []; groups[t].push(k); });
+
+  let html = '';
+  Object.entries(groups).forEach(([tipe, items]) => {
+    html += `<p class="text-xs font-bold text-gray-500 uppercase px-1 mt-3 mb-1">${tipe}</p>`;
+    html += items.map(k => `
+      <div class="master-item">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <span class="badge badge-gray font-mono">${esc(k.id_kategori)}</span>
+          <div class="min-w-0">
+            <p class="font-semibold text-gray-700 text-xs truncate">${esc(k.nama_kategori)}</p>
+            <p class="text-xs text-gray-400">${esc(k.pos || '-')}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <span class="badge ${tipe === 'PENDAPATAN' ? 'badge-green' : 'badge-red'}">${esc(tipe)}</span>
+          <button onclick="openEditKategoriModal('${esc(k.id_kategori)}')"
+            class="text-indigo-500 hover:text-indigo-700 text-xs px-1.5 py-1 rounded border border-indigo-200 hover:bg-indigo-50">✏️</button>
+          <button onclick="confirmArchiveKategori('${esc(k.id_kategori)}', '${esc(k.nama_kategori)}')"
+            class="text-amber-500 hover:text-amber-700 text-xs px-1.5 py-1 rounded border border-amber-200 hover:bg-amber-50" title="Arsipkan">📦</button>
+          <button onclick="confirmDeleteKategori('${esc(k.id_kategori)}', '${esc(k.nama_kategori)}')"
+            class="text-red-400 hover:text-red-600 text-xs px-1.5 py-1 rounded border border-red-200 hover:bg-red-50" title="Hapus Permanen">🗑️</button>
+        </div>
+      </div>`).join('');
+  });
+  document.getElementById('master-kategori-list').innerHTML = html;
+}
+
+function openEditKategoriModal(idKategori) {
+  const k = APP_STATE.masterKategori.find(x => x.id_kategori === idKategori);
+  if (!k) { showToast('❌ Data kategori tidak ditemukan.', 'error'); return; }
+  document.getElementById('modal-title').textContent = '✏️ Edit Kategori: ' + k.id_kategori;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs text-gray-500">
+      ID: <strong>${esc(k.id_kategori)}</strong> (tidak dapat diubah)
+    </div>
+    <div>
+      <label class="form-label">Nama Kategori <span class="text-red-400">*</span></label>
+      <input type="text" id="ek-nama" value="${esc(k.nama_kategori)}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tipe <span class="text-red-400">*</span></label>
+      <select id="ek-tipe" onchange="updatePosOptions(this.value)" class="form-control">
+        <option value="PENDAPATAN"  ${k.tipe === 'PENDAPATAN'  ? 'selected' : ''}>PENDAPATAN</option>
+        <option value="PENGELUARAN" ${k.tipe === 'PENGELUARAN' ? 'selected' : ''}>PENGELUARAN</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Pos</label>
+      <select id="ek-pos" class="form-control"></select>
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="ek-ket" value="${esc(k.keterangan || '')}" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  // Populate pos options
+  updatePosOptions(k.tipe, 'ek-pos', k.pos);
+
+  APP_STATE.modalAction = () => {
+    const updated = {
+      nama_kategori: val('ek-nama'),
+      tipe         : val('ek-tipe'),
+      pos          : val('ek-pos'),
+      keterangan   : val('ek-ket')
+    };
+    if (!updated.nama_kategori) { markInvalid('ek-nama'); showToast('Nama kategori wajib diisi.', 'error'); return; }
+
+    setModalLoading(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        setModalLoading(false);
+        if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadMaster(); loadAllMasterData(null); }
+        else showToast('❌ ' + res.message, 'error');
+      })
+      .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+      .updateKategori(k.id_kategori, updated);
+  };
+  openModal();
+}
+
+function confirmArchiveKategori(id, nama) {
+  if (!confirm(`Arsipkan kategori "${nama}"?\n\nKategori ini tidak akan muncul lagi di daftar aktif, tapi data historis tetap tersimpan.`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadMaster(); loadAllMasterData(null); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .archiveKategori(id);
+}
+
+function confirmDeleteKategori(id, nama) {
+  if (!confirm(`⚠️ HAPUS PERMANEN kategori "${nama}"?\n\nData ini akan dihapus dari sheet secara permanen.\nTransaksi lama yang menggunakan kategori ini tidak terpengaruh.\n\nYakin?`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadMaster(); loadAllMasterData(null); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deleteKategori(id);
+}
+
+function renderMasterAkun(list) {
+  if (!list || list.length === 0) {
+    document.getElementById('master-akun-list').innerHTML = '<p class="text-gray-400 text-center py-4 text-xs">Belum ada akun.</p>';
+    return;
+  }
+  const html = list.map(a => {
+    const badge = tipeAkunBadge(a.tipe_akun);
+    return `
+      <div class="master-item">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <span class="badge badge-gray font-mono">${esc(a.id_akun)}</span>
+          <div class="min-w-0">
+            <p class="font-semibold text-gray-700 text-xs truncate">${esc(a.nama_akun)}</p>
+            <p class="text-xs text-gray-400">Saldo Awal: ${formatRupiah(parseFloat(a.saldo_awal) || 0)}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <span class="badge ${badge.cls}">${badge.label}</span>
+          <button onclick="openEditAkunModal('${esc(a.id_akun)}')"
+            class="text-indigo-500 hover:text-indigo-700 text-xs px-1.5 py-1 rounded border border-indigo-200 hover:bg-indigo-50">✏️</button>
+          <button onclick="confirmArchiveAkun('${esc(a.id_akun)}', '${esc(a.nama_akun)}')"
+            class="text-amber-500 hover:text-amber-700 text-xs px-1.5 py-1 rounded border border-amber-200 hover:bg-amber-50" title="Arsipkan">📦</button>
+          <button onclick="confirmDeleteAkun('${esc(a.id_akun)}', '${esc(a.nama_akun)}')"
+            class="text-red-400 hover:text-red-600 text-xs px-1.5 py-1 rounded border border-red-200 hover:bg-red-50" title="Hapus Permanen">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('master-akun-list').innerHTML = html;
+}
+
+function openEditAkunModal(idAkun) {
+  const a = APP_STATE.masterAkun.find(x => x.id_akun === idAkun);
+  if (!a) { showToast('❌ Data akun tidak ditemukan.', 'error'); return; }
+  document.getElementById('modal-title').textContent = '✏️ Edit Akun: ' + a.id_akun;
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-xs text-gray-500">
+      ID: <strong>${esc(a.id_akun)}</strong> (tidak dapat diubah)
+    </div>
+    <div>
+      <label class="form-label">Nama Akun <span class="text-red-400">*</span></label>
+      <input type="text" id="ea-nama" value="${esc(a.nama_akun)}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tipe Akun <span class="text-red-400">*</span></label>
+      <select id="ea-tipe" class="form-control">
+        <option value="CASH"      ${a.tipe_akun === 'CASH'      ? 'selected' : ''}>CASH — Tunai</option>
+        <option value="BANK"      ${a.tipe_akun === 'BANK'      ? 'selected' : ''}>BANK — Rekening Bank</option>
+        <option value="E-WALLET"  ${a.tipe_akun === 'E-WALLET'  ? 'selected' : ''}>E-WALLET — Dompet Digital</option>
+        <option value="TABUNGAN"  ${a.tipe_akun === 'TABUNGAN'  ? 'selected' : ''}>TABUNGAN — Rekening Tabungan</option>
+        <option value="INVESTASI" ${a.tipe_akun === 'INVESTASI' ? 'selected' : ''}>INVESTASI — Rekening Investasi</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Saldo Awal (Rp)</label>
+      <input type="number" id="ea-saldo" value="${parseFloat(a.saldo_awal) || 0}" min="0" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="ea-ket" value="${esc(a.keterangan || '')}" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = () => {
+    const updated = {
+      nama_akun  : val('ea-nama'),
+      tipe_akun  : val('ea-tipe'),
+      saldo_awal : val('ea-saldo') || '0',
+      keterangan : val('ea-ket')
+    };
+    if (!updated.nama_akun) { markInvalid('ea-nama'); showToast('Nama akun wajib diisi.', 'error'); return; }
+
+    setModalLoading(true);
+    google.script.run
+      .withSuccessHandler(res => {
+        setModalLoading(false);
+        if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadMaster(); loadAllMasterData(null); }
+        else showToast('❌ ' + res.message, 'error');
+      })
+      .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+      .updateAkun(a.id_akun, updated);
+  };
+  openModal();
+}
+
+function confirmArchiveAkun(id, nama) {
+  if (!confirm(`Arsipkan akun "${nama}"?\n\nAkun ini tidak akan muncul lagi di daftar aktif, tapi data historis tetap tersimpan.`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadMaster(); loadAllMasterData(null); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .archiveAkun(id);
+}
+
+function confirmDeleteAkun(id, nama) {
+  if (!confirm(`⚠️ HAPUS PERMANEN akun "${nama}"?\n\nData ini akan dihapus dari sheet secara permanen.\n\nYakin?`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadMaster(); loadAllMasterData(null); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .deleteAkun(id);
+}
+
+function renderMasterSaldo(list) {
+  if (!list || list.length === 0) {
+    document.getElementById('master-saldo-list').innerHTML = '<p class="text-gray-400 text-center py-4 text-xs">Belum ada data saldo.</p>';
+    return;
+  }
+  const html = list.map(a => {
+    const saldo = parseFloat(a.saldo_akhir) || 0;
+    const neg   = saldo < 0;
+    const badge = tipeAkunBadge(a.tipe_akun);
+    return `
+      <div class="saldo-row">
+        <div class="flex justify-between items-center">
+          <div>
+            <p class="font-semibold text-gray-700 text-xs">${esc(a.nama_akun)}</p>
+            <span class="badge ${badge.cls}">${badge.label}</span>
+          </div>
+          <p class="font-bold text-sm ${neg ? 'saldo-akhir-negative' : 'saldo-akhir-positive'}">
+            ${neg ? '-' : ''}${formatRupiah(Math.abs(saldo))}
+          </p>
+        </div>
+        ${a.is_utang && a.limit_kredit > 0 ? `
+        <div class="mt-2 mb-1">
+          <div class="flex justify-between" style="margin-bottom:3px">
+            <span style="font-size:9px;color:var(--text-muted);font-weight:700">LIMIT TERPAKAI</span>
+            <span style="font-size:9px;font-weight:700;color:${a.sisa_limit/a.limit_kredit < 0.2?'#dc2626':'var(--primary)'}">Sisa ${formatRupiah(a.sisa_limit||0)}</span>
+          </div>
+          <div class="limit-bar-wrap"><div class="limit-bar-fill ${(a.sisa_limit/a.limit_kredit)>0.4?'limit-safe':''}" style="width:${Math.round((1-(a.sisa_limit||0)/(a.limit_kredit||1))*100)}%"></div></div>
+          <div class="flex justify-between mt-1">
+            <span style="font-size:9px;color:var(--text-muted)">Terpakai ${formatRupiah((a.limit_kredit||0)-(a.sisa_limit||0))}</span>
+            <span style="font-size:9px;color:var(--text-muted)">Limit ${formatRupiah(a.limit_kredit||0)}</span>
+          </div>
+        </div>` : ''}
+        <div class="grid grid-cols-3 gap-2 mt-2">
+          <div class="text-center">
+            <p class="text-xs text-gray-400">Masuk</p>
+            <p class="text-xs font-semibold text-green-600">${formatRupiah(parseFloat(a.total_masuk) || 0)}</p>
+          </div>
+          <div class="text-center">
+            <p class="text-xs text-gray-400">Keluar</p>
+            <p class="text-xs font-semibold text-red-500">${formatRupiah(parseFloat(a.total_keluar) || 0)}</p>
+          </div>
+          <div class="text-center">
+            <p class="text-xs text-gray-400">Saldo Awal</p>
+            <p class="text-xs font-semibold text-gray-600">${formatRupiah(parseFloat(a.saldo_awal) || 0)}</p>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('master-saldo-list').innerHTML = html;
+}
+
+function openAddKategoriModal() {
+  document.getElementById('modal-title').textContent = '+ Tambah Kategori';
+  document.getElementById('modal-body').innerHTML = `
+    <div>
+      <label class="form-label">ID Kategori <span class="text-red-400">*</span></label>
+      <input type="text" id="fk-id" placeholder="Contoh: K101" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Nama Kategori <span class="text-red-400">*</span></label>
+      <input type="text" id="fk-nama" placeholder="Nama kategori" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tipe <span class="text-red-400">*</span></label>
+      <select id="fk-tipe" onchange="updatePosOptions(this.value)" class="form-control">
+        <option value="">-- Pilih Tipe --</option>
+        <option value="PENDAPATAN">PENDAPATAN</option>
+        <option value="PENGELUARAN">PENGELUARAN</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Pos</label>
+      <select id="fk-pos" class="form-control">
+        <option value="">-- Pilih Tipe dulu --</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fk-ket" placeholder="Opsional" class="form-control">
+    </div>`;
+  APP_STATE.modalAction = submitAddKategori;
+  openModal();
+}
+
+function updatePosOptions(tipe, selectId, currentVal) {
+  const id  = selectId || 'fk-pos';
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const opts = {
+    PENDAPATAN : ['PENDAPATAN_RUTIN','PENDAPATAN_LAINNYA'],
+    PENGELUARAN: ['KEBUTUHAN','KEINGINAN','TABUNGAN','INVESTASI','SOSIAL','UTANG','ARISAN','LAINNYA']
+  };
+  const list = opts[tipe] || [];
+  sel.innerHTML = '<option value="">-- Pilih Pos --</option>' +
+    list.map(p => `<option value="${p}" ${p === currentVal ? 'selected' : ''}>${p}</option>`).join('');
+}
+
+function submitAddKategori() {
+  const data = {
+    id_kategori  : val('fk-id'),
+    nama_kategori: val('fk-nama'),
+    tipe         : val('fk-tipe'),
+    pos          : val('fk-pos'),
+    keterangan   : val('fk-ket')
+  };
+  if (!data.id_kategori)   { markInvalid('fk-id');   showToast('ID Kategori wajib diisi.',   'error'); return; }
+  if (!data.nama_kategori) { markInvalid('fk-nama');  showToast('Nama kategori wajib diisi.', 'error'); return; }
+  if (!data.tipe)          { markInvalid('fk-tipe');  showToast('Tipe wajib dipilih.',        'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) { closeModal(); showToast('✅ ' + res.message, 'success'); loadMaster(); loadAllMasterData(null); }
+      else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addKategori(data);
+}
+
+function openAddAkunModal() {
+  document.getElementById('modal-title').textContent = '+ Tambah Akun';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-700">
+      ID akun akan dibuat otomatis (A006, A007, dst) jika dikosongkan.
+    </div>
+    <div>
+      <label class="form-label">ID Akun <span class="text-gray-400 font-normal">(opsional)</span></label>
+      <input type="text" id="fa-id" placeholder="Kosongkan untuk auto-generate" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Nama Akun <span class="text-red-400">*</span></label>
+      <input type="text" id="fa-nama" placeholder="Contoh: BCA, OVO, BCA CC Platinum" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Tipe Akun <span class="text-red-400">*</span></label>
+      <select id="fa-tipe" class="form-control" onchange="onTipeAkunChange(this.value)">
+        <option value="CASH">CASH — Tunai</option>
+        <option value="BANK">BANK — Rekening Bank</option>
+        <option value="E-WALLET">E-WALLET — Dompet Digital</option>
+        <option value="TABUNGAN">TABUNGAN — Rekening Tabungan</option>
+        <option value="INVESTASI">INVESTASI — Rekening Investasi</option>
+        <option value="CREDIT_CARD">CREDIT_CARD — Kartu Kredit 💳</option>
+        <option value="PAYLATER">PAYLATER — Paylater / BNPL 💜</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Saldo Awal (Rp)</label>
+      <input type="number" id="fa-saldo" placeholder="0 (biasanya 0 untuk CC/Paylater)" min="0" class="form-control">
+    </div>
+    <!-- v1.1: Kolom khusus CC/Paylater — hidden by default -->
+    <div id="fa-kredit-section" class="hidden space-y-3 cicilan-toggle-wrap">
+      <p style="font-size:11px;font-weight:800;color:var(--primary)">⚙️ Pengaturan Kartu Kredit / Paylater</p>
+      <div>
+        <label class="form-label">Limit Kredit (Rp) <span class="text-red-400">*</span></label>
+        <input type="number" id="fa-limit" placeholder="Contoh: 10000000" min="0" class="form-control">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="form-label">Tgl Cetak Tagihan</label>
+          <input type="number" id="fa-tgl-cetak" placeholder="1–31" min="1" max="31" class="form-control">
+        </div>
+        <div>
+          <label class="form-label">Tgl Jatuh Tempo <span class="text-red-400">*</span></label>
+          <input type="number" id="fa-tgl-jt" placeholder="1–31" min="1" max="31" class="form-control">
+        </div>
+      </div>
+      <div class="info-box" style="font-size:10px;padding:8px 10px;">
+        💡 Jatuh tempo digunakan untuk <strong>Bill Reminder</strong> otomatis 7 hari sebelum tagihan.
+      </div>
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fa-ket" placeholder="Opsional" class="form-control">
+    </div>`;
+  APP_STATE.modalAction = submitAddAkun;
+  openModal();
+}
+
+// v1.1: Toggle CC/Paylater fields di form akun
+function onTipeAkunChange(tipe) {
+  const isUtang = ['CREDIT_CARD','PAYLATER'].includes(tipe.toUpperCase());
+  const section = document.getElementById('fa-kredit-section');
+  if (section) section.classList.toggle('hidden', !isUtang);
+}
+
+function submitAddAkun() {
+  const tipeAkun = val('fa-tipe');
+  const isUtang  = ['CREDIT_CARD','PAYLATER'].includes(tipeAkun.toUpperCase());
+  const data = {
+    id_akun           : val('fa-id'),
+    nama_akun         : val('fa-nama'),
+    tipe_akun         : tipeAkun,
+    saldo_awal        : val('fa-saldo') || 0,
+    keterangan        : val('fa-ket'),
+    // v1.1 CC/Paylater fields
+    limit_kredit      : isUtang ? val('fa-limit')     : 0,
+    tgl_cetak_tagihan : isUtang ? val('fa-tgl-cetak') : 0,
+    tgl_jatuh_tempo   : isUtang ? val('fa-tgl-jt')    : 0
+  };
+  if (!data.nama_akun) { markInvalid('fa-nama'); showToast('Nama akun wajib diisi.', 'error'); return; }
+  if (isUtang && (!data.limit_kredit || parseFloat(data.limit_kredit) <= 0)) {
+    markInvalid('fa-limit'); showToast('Limit kredit wajib diisi.', 'error'); return;
+  }
+  if (isUtang && (!data.tgl_jatuh_tempo || parseInt(data.tgl_jatuh_tempo) < 1)) {
+    markInvalid('fa-tgl-jt'); showToast('Tanggal jatuh tempo wajib diisi.', 'error'); return;
+  }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal(); showToast('✅ ' + res.message, 'success');
+        loadMaster(); loadAllMasterData(null);
+      } else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addAkun(data);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MODAL SYSTEM
+// ══════════════════════════════════════════════════════════════════
+function openModal() {
+  const el = document.getElementById('modal-overlay');
+  el.classList.remove('hidden'); el.classList.add('flex');
+  document.getElementById('modal-submit-btn').textContent = 'Simpan';
+  document.getElementById('modal-submit-btn').disabled    = false;
+}
+
+function closeModal() {
+  const el = document.getElementById('modal-overlay');
+  el.classList.remove('flex'); el.classList.add('hidden');
+  APP_STATE.modalAction = null;
+}
+
+function submitModal() {
+  if (typeof APP_STATE.modalAction === 'function') APP_STATE.modalAction();
+}
+
+function setModalLoading(loading) {
+  const btn = document.getElementById('modal-submit-btn');
+  if (!btn) return;
+  btn.disabled    = loading;
+  btn.textContent = loading ? 'Menyimpan...' : 'Simpan';
+}
+
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  UTILITY FUNCTIONS
+// ══════════════════════════════════════════════════════════════════
+function formatRupiah(angka) {
+  const n = parseFloat(angka) || 0;
+  return 'Rp ' + n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatTanggal(val) {
+  if (!val) return '-';
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return val.toString().substring(0, 10);
+  return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function bulanToDisplay(iso) {
+  if (!iso) return '';
+  const [yyyy, mm] = iso.toString().split('-');
+  const months = ['Januari','Februari','Maret','April','Mei','Juni',
+                  'Juli','Agustus','September','Oktober','November','Desember'];
+  return `${months[parseInt(mm,10)-1] || mm} ${yyyy}`;
+}
+
+function buildKatMap() {
+  const m = {};
+  APP_STATE.masterKategori.forEach(k => { m[k.id_kategori] = k.nama_kategori; });
+  return m;
+}
+
+function buildAkunMap() {
+  const m = {};
+  APP_STATE.masterAkun.forEach(a => { m[a.id_akun] = a.nama_akun; });
+  return m;
+}
+
+function buildAkunOptions(filterFn) {
+  return APP_STATE.masterAkun
+    .filter(filterFn || (() => true))
+    .map(a => {
+      const badge = tipeAkunBadge(a.tipe_akun);
+      return `<option value="${esc(a.id_akun)}" data-tipe="${esc(a.tipe_akun)}">${esc(a.nama_akun)} (${badge.label})</option>`;
+    })
+    .join('');
+}
+
+// Akun non-utang saja (untuk akun sumber bayar tagihan)
+function buildAkunNonUtangOptions() {
+  return buildAkunOptions(a => !['CREDIT_CARD','PAYLATER'].includes((a.tipe_akun||'').toUpperCase()));
+}
+
+function tipeAkunBadge(tipe) {
+  const map = {
+    'CASH'        : { cls: 'badge-green',   label: 'Tunai'      },
+    'BANK'        : { cls: 'badge-blue',    label: 'Bank'       },
+    'E-WALLET'    : { cls: 'badge-violet',  label: 'E-Wallet'   },
+    'TABUNGAN'    : { cls: 'badge-teal',    label: 'Tabungan'   },
+    'INVESTASI'   : { cls: 'badge-amber',   label: 'Investasi'  },
+    'CREDIT_CARD' : { cls: 'badge-cc',      label: 'Kartu Kredit'},
+    'PAYLATER'    : { cls: 'badge-paylater',label: 'Paylater'   }
+  };
+  return map[(tipe || '').toUpperCase()] || { cls: 'badge-gray', label: tipe || '-' };
+}
+
+function showToast(message, type = 'info') {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.className   = `fixed bottom-4 left-1/2 -translate-x-1/2 text-white text-xs px-4 py-2.5 rounded-full shadow-lg z-50 max-w-xs text-center toast-${type}`;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 3500);
+}
+
+function show(id) { const el = document.getElementById(id); if (el) el.classList.remove('hidden'); }
+function hide(id) { const el = document.getElementById(id); if (el) el.classList.add('hidden'); }
+function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+function val(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function markInvalid(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('is-invalid');
+  el.addEventListener('input', () => el.classList.remove('is-invalid'), { once: true });
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SANKEY DIAGRAM
+// ══════════════════════════════════════════════════════════════════
+let _sankeyChartsLoaded = false;
+
+function loadSankey() {
+  const bulan = APP_STATE.currentBulan;
+  show('sankey-loader');
+  hide('sankey-chart-container');
+  hide('sankey-empty');
+
+  if (!_sankeyChartsLoaded) {
+    google.charts.load('current', { packages: ['sankey'] });
+    google.charts.setOnLoadCallback(() => {
+      _sankeyChartsLoaded = true;
+      _fetchAndDrawSankey(bulan);
+    });
+  } else {
+    _fetchAndDrawSankey(bulan);
+  }
+}
+
+function _fetchAndDrawSankey(bulan) {
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('sankey-loader');
+      if (res.success && res.data && res.data.length > 0) {
+        drawSankeyChart(res.data);
+        show('sankey-chart-container');
+      } else {
+        show('sankey-empty');
+      }
+    })
+    .withFailureHandler(err => {
+      hide('sankey-loader');
+      show('sankey-empty');
+      showToast('❌ Gagal memuat Sankey: ' + err.message, 'error');
+    })
+    .getSankeyData(bulan);
+}
+
+function drawSankeyChart(rows) {
+  const data = new google.visualization.DataTable();
+  data.addColumn('string', 'Dari');
+  data.addColumn('string', 'Ke');
+  data.addColumn('number', 'Jumlah');
+  data.addRows(rows);
+
+  const palette = ['#076653','#E3EF26','#43A68F','#8FCA3C','#E2FBCE','#2d8a72','#b8e04a'];
+  const options = {
+    height: 240,
+    sankey: {
+      node: {
+        colors   : palette,
+        label    : { fontSize: 11, color: '#043d32', bold: true, fontName: 'DM Sans' },
+        interactivity: true,
+        width    : 18,
+        nodePadding: 14
+      },
+      link: {
+        colorMode : 'gradient',
+        colors    : palette,
+        fillOpacity: 0.28
+      }
+    }
+  };
+
+  const container = document.getElementById('sankey_chart');
+  if (!container) return;
+  const chart = new google.visualization.Sankey(container);
+  chart.draw(data, options);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TAB CICILAN  (v1.1)
+// ══════════════════════════════════════════════════════════════════
+
+function switchCicilanTab(tabName) {
+  ['aktif','riwayat'].forEach(t => {
+    document.getElementById('ccontent-' + t).classList.add('hidden');
+    const b = document.getElementById('ctab-' + t);
+    if (b) b.classList.remove('active');
+  });
+  document.getElementById('ccontent-' + tabName).classList.remove('hidden');
+  const btn = document.getElementById('ctab-' + tabName);
+  if (btn) btn.classList.add('active');
+  APP_STATE.currentCicilanTab = tabName;
+}
+
+function loadCicilan() {
+  hide('ccontent-aktif'); hide('ccontent-riwayat');
+  show('cicilan-loader');
+  hide('cicilan-aktif-empty'); hide('cicilan-riwayat-empty');
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('cicilan-loader');
+      if (res.success) {
+        APP_STATE.cicilanData = res.data || [];
+        renderCicilan(APP_STATE.cicilanData);
+        switchCicilanTab(APP_STATE.currentCicilanTab || 'aktif');
+      } else {
+        showToast('❌ ' + res.message, 'error');
+      }
+    })
+    .withFailureHandler(err => {
+      hide('cicilan-loader');
+      showToast('❌ ' + err.message, 'error');
+    })
+    .getCicilanList();
+}
+
+function renderCicilan(list) {
+  const aktif   = list.filter(c => c.status === 'AKTIF');
+  const riwayat = list.filter(c => c.status === 'LUNAS');
+
+  const summaryEl = document.getElementById('cicilan-summary');
+  if (summaryEl) {
+    if (aktif.length > 0) {
+      summaryEl.classList.remove('hidden');
+      const totalUtang    = aktif.reduce((s,c) => s + (parseFloat(c.total_harga)||0) - (parseFloat(c.total_terbayar)||0), 0);
+      const totalPerBulan = aktif.reduce((s,c) => s + (parseFloat(c.cicilan_per_bulan)||0), 0);
+      document.getElementById('csum-utang').textContent    = formatRupiah(totalUtang);
+      document.getElementById('csum-perbulan').textContent = formatRupiah(totalPerBulan);
+    } else {
+      summaryEl.classList.add('hidden');
+    }
+  }
+
+  const aktifEl = document.getElementById('cicilan-aktif-list');
+  if (aktifEl) {
+    if (aktif.length > 0) {
+      aktifEl.innerHTML = aktif.map(c => renderCicilanCard(c)).join('');
+      hide('cicilan-aktif-empty');
+    } else {
+      aktifEl.innerHTML = '';
+      show('cicilan-aktif-empty');
+    }
+  }
+
+  const riwEl = document.getElementById('cicilan-riwayat-list');
+  if (riwEl) {
+    if (riwayat.length > 0) {
+      riwEl.innerHTML = riwayat.map(c => renderCicilanCard(c)).join('');
+      hide('cicilan-riwayat-empty');
+    } else {
+      riwEl.innerHTML = '';
+      show('cicilan-riwayat-empty');
+    }
+  }
+}
+
+function renderCicilanCard(c) {
+  const tenor      = parseInt(c.tenor_bulan, 10) || 1;
+  const sisa       = parseInt(c.sisa_tenor,  10) || 0;
+  const terbayar   = tenor - sisa;
+  const pct        = Math.round((terbayar / tenor) * 100);
+  const isLunas    = c.status === 'LUNAS';
+  const totalSisa  = (parseFloat(c.total_harga)||0) - (parseFloat(c.total_terbayar)||0);
+
+  const akunMap  = buildAkunMap();
+  const namaAkun = akunMap[c.id_akun_kredit] || c.id_akun_kredit || '–';
+
+  const badge = tipeAkunBadge(
+    APP_STATE.masterAkun.find(a => a.id_akun === c.id_akun_kredit)?.tipe_akun || 'CREDIT_CARD'
+  );
+
+  return `
+    <div class="cicilan-card ${isLunas ? 'cicilan-lunas' : ''}">
+      <div class="flex justify-between items-start mb-1">
+        <div style="flex:1;min-width:0">
+          <p style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.nama_barang)}</p>
+          <div class="flex items-center gap-2 mt-0.5">
+            <span class="badge ${badge.cls}">${esc(namaAkun)}</span>
+            ${isLunas ? '<span class="badge badge-green">✅ Lunas</span>' : `<span class="badge badge-amber">${sisa}x cicilan lagi</span>`}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:8px">
+          <p style="font-size:14px;font-weight:900;color:${isLunas?'#15803d':'#b91c1c'}">${formatRupiah(parseFloat(c.cicilan_per_bulan)||0)}</p>
+          <p style="font-size:9px;color:var(--text-muted)">per bulan</p>
+        </div>
+      </div>
+
+      <div class="cicilan-progress-wrap">
+        <div class="cicilan-progress-fill ${isLunas?'progress-done':''}" style="width:${pct}%"></div>
+      </div>
+      <div class="flex justify-between" style="margin-top:2px">
+        <span style="font-size:9px;color:var(--text-muted)">${terbayar}/${tenor} bulan terbayar (${pct}%)</span>
+        ${!isLunas ? `<span style="font-size:9px;color:#dc2626;font-weight:700">Sisa ${formatRupiah(totalSisa)}</span>` : ''}
+      </div>
+
+      ${!isLunas ? `
+      <div class="flex gap-2 mt-3">
+        <button onclick="openBayarTagihanModal('${esc(c.id_cicilan)}','${esc(namaAkun)}',${parseFloat(c.cicilan_per_bulan)||0})"
+          class="btn-primary" style="padding:9px 12px;font-size:12px;border-radius:11px;">
+          💳 Bayar Tagihan
+        </button>
+        <button onclick="confirmLunasCicilan('${esc(c.id_cicilan)}','${esc(c.nama_barang)}')"
+          class="btn-secondary" style="padding:9px 12px;font-size:12px;border-radius:11px;flex:none">
+          ✓ Lunas
+        </button>
+      </div>` : ''}
+    </div>`;
+}
+
+function openBayarTagihanModal(idCicilan, namaAkun, nominalPerBulan) {
+  const akunOptions = buildAkunNonUtangOptions();
+
+  document.getElementById('modal-title').textContent = '💳 Bayar Tagihan';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="info-box">
+      <p style="font-size:12px;font-weight:800;color:var(--primary)">Membayar tagihan: ${esc(namaAkun)}</p>
+      <p style="font-size:11px;margin-top:3px">Nominal: <strong>${formatRupiah(nominalPerBulan)}</strong></p>
+      <p style="font-size:10px;margin-top:2px;color:var(--text-muted)">Sistem akan catat sebagai transfer internal — tidak masuk hitungan pengeluaran baru.</p>
+    </div>
+    <div>
+      <label class="form-label">Bayar dari Akun (Bank/Tunai) <span class="text-red-400">*</span></label>
+      <select id="fb-akun-bank" class="form-control">
+        <option value="">-- Pilih akun sumber --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Tanggal Bayar</label>
+      <input type="date" id="fb-tanggal" value="${new Date().toISOString().split('T')[0]}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Anggota Keluarga</label>
+      <select id="fb-anggota" class="form-control">
+        <option value="Bersama">Bersama</option>
+        <option value="Suami">Suami</option>
+        <option value="Istri">Istri</option>
+      </select>
+    </div>
+    <input type="hidden" id="fb-id-cicilan" value="${esc(idCicilan)}">`;
+
+  APP_STATE.modalAction = submitBayarTagihan;
+  openModal();
+}
+
+function submitBayarTagihan() {
+  const idCicilan  = val('fb-id-cicilan');
+  const idAkunBank = val('fb-akun-bank');
+  const tanggal    = val('fb-tanggal');
+
+  if (!idAkunBank) { markInvalid('fb-akun-bank'); showToast('Pilih akun sumber pembayaran.', 'error'); return; }
+  if (!tanggal)    { markInvalid('fb-tanggal');   showToast('Tanggal wajib diisi.', 'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal();
+        showToast('✅ ' + res.message, 'success');
+        loadCicilan();
+        if (APP_STATE.currentTab === 'dashboard') loadDashboard();
+      } else {
+        showToast('❌ ' + res.message, 'error');
+      }
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .bayarTagihanCC({
+      id_cicilan      : idCicilan,
+      id_akun_bank    : idAkunBank,
+      tanggal         : tanggal,
+      anggota_keluarga: val('fb-anggota')
+    });
+}
+
+function confirmLunasCicilan(idCicilan, namaBrang) {
+  if (!confirm(`Tandai cicilan "${namaBrang}" sebagai LUNAS?\n\nGunakan ini untuk pelunasan dipercepat (tidak membuat transaksi transfer).`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) loadCicilan();
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .lunasCicilan(idCicilan);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CATATAN PERBAIKAN:
+//  - Dihapus: const _origRenderDashboard = renderDashboard; (infinite recursion)
+//  - loadSankey() sekarang dipanggil dari loadDashboard() success handler
+//  - switchTab() closing brace diperbaiki
+// ══════════════════════════════════════════════════════════════════
+
+</script>
