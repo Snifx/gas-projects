@@ -1,209 +1,251 @@
 /**
- * MODUL: MAINTENANCE & TRIGGER SETUP
+ * MODUL: MAINTENANCE ENGINE
+ * v1.2 CHANGES:
+ *   - setupSchema(): buat sheet Hutang_Piutang jika belum ada
+ *   - setupSchema(): tambah kolom id_hp ke sheet Transaksi jika belum ada
+ *   - Schema Hutang_Piutang: 13 kolom sesuai spesifikasi
+ *
  * v1.1 CHANGES:
- *   - setupSchema(): tambah kolom baru v1.1
- *       Master_Akun  → limit_kredit, tgl_cetak_tagihan, tgl_jatuh_tempo
- *       Transaksi    → id_cicilan
- *       Saldo_Akun   → sisa_limit (kolom informasi, tidak di-compute oleh sheet)
- *   - setupSchema(): auto-create sheet Cicilan_Tracking jika belum ada
- *   - Fungsi lain tidak berubah
+ *   - setupSchema(): buat sheet Cicilan_Tracking
+ *   - setupSchema(): tambah kolom id_cicilan ke sheet Transaksi
  */
 
 // ══════════════════════════════════════════════════════════════
-//  SETUP SCHEMA
+//  SCHEMA DEFINITIONS
+// ══════════════════════════════════════════════════════════════
+
+const SCHEMA = {
+  Master_Kategori: {
+    headers: ['id_kategori', 'nama_kategori', 'tipe', 'pos', 'deskripsi', 'warna', 'urutan', 'aktif'],
+    freeze : 1,
+    widths : [120, 200, 120, 120, 250, 80, 70, 60]
+  },
+  Master_Akun: {
+    headers: ['id_akun', 'nama_akun', 'tipe_akun', 'saldo_awal', 'limit_kredit', 'tgl_jatuh_tempo', 'aktif', 'keterangan'],
+    freeze : 1,
+    widths : [120, 200, 120, 130, 130, 130, 60, 200]
+  },
+  Transaksi: {
+    headers: [
+      'id_transaksi', 'tanggal', 'bulan', 'id_akun', 'id_kategori',
+      'tipe', 'jumlah', 'deskripsi', 'metode_bayar', 'anggota_keluarga',
+      'catatan', 'status_hapus', 'input_by', 'id_akun_tujuan',
+      'id_cicilan',  // v1.1
+      'id_hp'        // v1.2
+    ],
+    freeze: 1,
+    widths: [150, 100, 90, 120, 120, 110, 120, 250, 110, 130, 200, 90, 180, 120, 130, 130]
+  },
+  Budget_Bulanan: {
+    headers: ['id_budget', 'bulan', 'id_kategori', 'nama_kategori', 'pos', 'budget', 'keterangan'],
+    freeze : 1,
+    widths : [130, 80, 120, 200, 120, 130, 200]
+  },
+  Budget_Template: {
+    headers: ['id_template', 'nama_template', 'id_kategori', 'nama_kategori', 'pos', 'budget', 'aktif'],
+    freeze : 1,
+    widths : [130, 200, 120, 200, 120, 130, 60]
+  },
+  Rekap_Bulanan: {
+    headers: ['bulan', 'total_pendapatan', 'total_pengeluaran', 'surplus', 'total_kebutuhan', 'total_keinginan', 'total_tabungan', 'terakhir_update'],
+    freeze : 1,
+    widths : [90, 150, 150, 130, 140, 140, 130, 160]
+  },
+  Saldo_Akun: {
+    headers: ['id_akun', 'nama_akun', 'tipe_akun', 'saldo_awal', 'total_masuk', 'total_keluar', 'saldo_akhir', 'limit_kredit', 'sisa_limit', 'tgl_jatuh_tempo', 'terakhir_update'],
+    freeze : 1,
+    widths : [120, 200, 120, 130, 130, 130, 130, 130, 120, 130, 160]
+  },
+  Arisan_Tracking: {
+    headers: ['id_arisan', 'nama_grup', 'nominal_iuran', 'total_peserta', 'periode', 'tanggal_mulai', 'tanggal_selesai', 'total_dapat', 'sudah_dapat', 'aktif', 'keterangan'],
+    freeze : 1,
+    widths : [130, 200, 130, 110, 100, 120, 120, 120, 100, 60, 200]
+  },
+  // v1.1
+  Cicilan_Tracking: {
+    headers: [
+      'id_cicilan', 'id_transaksi_awal', 'id_akun_kredit', 'nama_barang',
+      'total_harga', 'tenor_bulan', 'cicilan_per_bulan', 'sudah_terbayar',
+      'sisa_cicilan', 'tanggal_mulai', 'tanggal_lunas_est', 'status', 'keterangan'
+    ],
+    freeze : 1,
+    widths : [130, 150, 120, 250, 130, 110, 140, 130, 120, 120, 140, 80, 200]
+  },
+  // v1.2 NEW
+  Hutang_Piutang: {
+    headers: [
+      'id_hp', 'tipe', 'nama_pihak', 'deskripsi',
+      'id_kategori', 'nama_kategori', 'id_akun',
+      'total_pinjaman', 'total_terbayar',
+      'tanggal_mulai', 'tanggal_jatuh_tempo',
+      'status', 'keterangan'
+    ],
+    freeze : 1,
+    widths : [130, 80, 200, 250, 120, 180, 120, 140, 140, 120, 140, 80, 200]
+  }
+};
+
+
+// ══════════════════════════════════════════════════════════════
+//  MAIN: SETUP SCHEMA
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Memastikan semua kolom dan sheet wajib ada.
- * Aman dijalankan berulang kali — tidak menghapus data yang ada.
- *
- * Kolom yang dikelola v1.1:
- *   Master_Akun        → limit_kredit (0), tgl_cetak_tagihan (0), tgl_jatuh_tempo (0)
- *   Transaksi          → id_cicilan ('')
- *   Saldo_Akun         → sisa_limit ('')   [computed di backend, bukan formula sheet]
- *   Sheet baru         → Cicilan_Tracking  [dibuat jika belum ada]
- *
- * Kolom dari v2.2 (tetap dikelola):
- *   Transaksi          → status_hapus, id_akun_tujuan, input_by
- *   Arisan_Tracking    → status_aktif
- *   Master_Akun        → status_aktif
- *   Master_Kategori    → status_aktif
+ * Menginisialisasi / memperbarui skema semua sheet.
+ * Safe to re-run — tidak akan menghapus data.
  */
 function setupSchema() {
-  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const results = [];
 
-  try {
-    const log = [];
+  Object.entries(SCHEMA).forEach(([sheetName, schemaDef]) => {
+    try {
+      let sheet = ss.getSheetByName(sheetName);
+      let created = false;
 
-    // ── Transaksi ──────────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'status_hapus',   APP_CONFIG.STATUS.AKTIF));
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'id_akun_tujuan', ''));   // v2.2
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'input_by',       ''));   // v2.2
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.TRANSAKSI, 'id_cicilan',     ''));   // v1.1 NEW
+      if (!sheet) {
+        sheet   = ss.insertSheet(sheetName);
+        created = true;
+      }
 
-    // ── Master_Akun ────────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'status_aktif',        APP_CONFIG.STATUS.MASTER_AKTIF));
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'limit_kredit',        '0'));   // v1.1 NEW
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'tgl_cetak_tagihan',   '0'));   // v1.1 NEW
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_AKUN, 'tgl_jatuh_tempo',     '0'));   // v1.1 NEW
+      _ensureHeaders(sheet, schemaDef.headers, schemaDef.widths || []);
+      if (schemaDef.freeze) sheet.setFrozenRows(schemaDef.freeze);
 
-    // ── Saldo_Akun ─────────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.SALDO, 'sisa_limit', ''));   // v1.1 NEW (informasi saja)
+      results.push({ sheet: sheetName, status: created ? 'CREATED' : 'UPDATED' });
 
-    // ── Arisan_Tracking ────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.ARISAN, 'status_aktif', APP_CONFIG.STATUS.ARISAN_AKTIF));
+    } catch (err) {
+      results.push({ sheet: sheetName, status: 'ERROR', error: err.message });
+      console.error(`setupSchema [${sheetName}]:`, err.message);
+    }
+  });
 
-    // ── Master_Kategori ────────────────────────────────────────────────────
-    log.push(_ensureColumn(APP_CONFIG.SHEETS.MASTER_KATEGORI, 'status_aktif', APP_CONFIG.STATUS.MASTER_AKTIF));
+  // ── v1.1 Migration: tambah id_cicilan ke Transaksi ─────────────────────────
+  _migrateAddColumn(ss, 'Transaksi', 'id_cicilan', 120);
 
-    // ── Cicilan_Tracking (v1.1 NEW — buat sheet jika belum ada) ───────────
-    log.push(_ensureCicilanSheet());
+  // ── v1.2 Migration: tambah id_hp ke Transaksi ──────────────────────────────
+  _migrateAddColumn(ss, 'Transaksi', 'id_hp', 130);
 
-    // Bersihkan cache
-    invalidateAllCache();
+  // Tampilkan laporan ke console
+  console.log('setupSchema results:', JSON.stringify(results, null, 2));
 
-    const summary = log.join('\n');
-    console.log('setupSchema v1.1 selesai:\n' + summary);
+  const allOk   = results.every(r => r.status !== 'ERROR');
+  const created = results.filter(r => r.status === 'CREATED').map(r => r.sheet);
+  const updated = results.filter(r => r.status === 'UPDATED').map(r => r.sheet);
 
-    ui.alert(
-      '✅ Setup Schema v1.1 Selesai',
-      summary + '\n\nCache telah dibersihkan.\nFitur Kartu Kredit & Cicilan siap digunakan.',
-      ui.ButtonSet.OK
-    );
-
-  } catch (e) {
-    console.error('setupSchema error:', e.message, e.stack);
-    ui.alert('❌ Error saat Setup Schema', e.message, ui.ButtonSet.OK);
-  }
+  return {
+    success: allOk,
+    message: `Schema setup selesai. Dibuat: [${created.join(', ')}]. Diperbarui: [${updated.join(', ')}].`,
+    results: results
+  };
 }
 
 /**
- * Memastikan sheet Cicilan_Tracking ada dengan header lengkap.
- * Jika sudah ada → tidak mengubah apapun.
- * Jika belum ada → buat sheet baru dengan header dan freeze row.
- * @return {string} Pesan log
+ * Memastikan header sheet sesuai schema.
+ * - Jika sheet kosong → tulis header baru
+ * - Jika header sudah ada → tambah kolom yang belum ada (non-destructive)
+ * @private
  */
-function _ensureCicilanSheet() {
-  const sheetName = APP_CONFIG.SHEETS.CICILAN;
-  const ss        = SpreadsheetApp.getActiveSpreadsheet();
-
-  let sheet = ss.getSheetByName(sheetName);
-  if (sheet) {
-    return `✔ Sheet "${sheetName}" sudah ada.`;
-  }
-
-  // Buat sheet baru
-  sheet = ss.insertSheet(sheetName);
-
-  // Header sesuai schema Cicilan_Tracking
-  const headers = [
-    'id_cicilan',
-    'id_transaksi_awal',
-    'id_akun_kredit',
-    'nama_barang',
-    'total_harga',
-    'tenor_bulan',
-    'cicilan_per_bulan',
-    'sisa_tenor',
-    'total_terbayar',
-    'tgl_jatuh_tempo',
-    'status',
-    'keterangan'
-  ];
-
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-
-  // Format header: bold, background hijau gelap, teks putih
-  const headerRange = sheet.getRange(1, 1, 1, headers.length);
-  headerRange.setFontWeight('bold');
-  headerRange.setBackground('#076653');
-  headerRange.setFontColor('#ffffff');
-
-  // Freeze header row
-  sheet.setFrozenRows(1);
-
-  // Auto-resize kolom
-  sheet.autoResizeColumns(1, headers.length);
-
-  return `➕ Sheet "${sheetName}" berhasil dibuat dengan ${headers.length} kolom.`;
-}
-
-/**
- * Helper: Menambahkan kolom ke sheet jika belum ada.
- * Mengisi semua baris data yang ada dengan nilai default.
- *
- * @param  {string} sheetName    - Nama sheet
- * @param  {string} columnName   - Nama kolom (header)
- * @param  {string} defaultValue - Nilai default untuk baris yang ada
- * @return {string} - Pesan log hasil operasi
- */
-function _ensureColumn(sheetName, columnName, defaultValue) {
-  const sheet   = getSheet(sheetName);
+function _ensureHeaders(sheet, headers, widths) {
   const lastCol = sheet.getLastColumn();
 
-  if (lastCol === 0) return `⚠️ Sheet "${sheetName}" kosong, skip.`;
+  if (lastCol === 0) {
+    // Sheet kosong — tulis header baru
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setValues([headers]);
+    headerRange.setFontWeight('bold');
+    headerRange.setBackground('#D3E3FD');
+    headerRange.setWrap(false);
 
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  const exists  = headers.map(h => (h || '').toString().trim()).includes(columnName);
-
-  if (exists) {
-    return `✔ Kolom "${columnName}" sudah ada di sheet "${sheetName}".`;
+    if (widths && widths.length) {
+      widths.forEach((w, i) => {
+        if (w) sheet.setColumnWidth(i + 1, w);
+      });
+    }
+    return;
   }
 
-  const newColIndex = lastCol + 1;
-  sheet.getRange(1, newColIndex).setValue(columnName);
+  // Sheet sudah ada header — bandingkan dan tambah kolom baru di akhir
+  const existingHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const existingSet     = new Set(existingHeaders.map(h => h.toString().toLowerCase().trim()));
 
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    const defaults = Array.from({ length: lastRow - 1 }, () => [defaultValue]);
-    sheet.getRange(2, newColIndex, lastRow - 1, 1).setValues(defaults);
+  headers.forEach((h, i) => {
+    if (!existingSet.has(h.toLowerCase().trim())) {
+      const newCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, newCol).setValue(h).setFontWeight('bold').setBackground('#D3E3FD');
+      if (widths && widths[i]) sheet.setColumnWidth(newCol, widths[i]);
+      console.log(`_ensureHeaders: added column "${h}" to "${sheet.getName()}" at col ${newCol}`);
+    }
+  });
+}
+
+/**
+ * Migrasi non-destructive: tambah kolom ke sheet yang sudah ada jika belum ada.
+ * @private
+ */
+function _migrateAddColumn(ss, sheetName, colName, width) {
+  try {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return;
+
+    const lastCol       = sheet.getLastColumn();
+    if (lastCol === 0)  return;
+
+    const headerRow     = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+    const existingNames = headerRow.map(h => h.toString().toLowerCase().trim());
+
+    if (!existingNames.includes(colName.toLowerCase())) {
+      const newColIdx = lastCol + 1;
+      sheet.getRange(1, newColIdx).setValue(colName).setFontWeight('bold').setBackground('#D3E3FD');
+      if (width) sheet.setColumnWidth(newColIdx, width);
+      console.log(`_migrateAddColumn: added "${colName}" to "${sheetName}" at col ${newColIdx}`);
+    }
+
+  } catch (e) {
+    console.error(`_migrateAddColumn [${sheetName}/${colName}]:`, e.message);
   }
-
-  return `➕ Kolom "${columnName}" ditambahkan ke "${sheetName}" (${lastRow - 1} baris diisi "${defaultValue}").`;
 }
 
 
 // ══════════════════════════════════════════════════════════════
-//  CACHE MANAGEMENT (tidak berubah)
+//  CACHE UTILITIES (used by Code_Config / others)
 // ══════════════════════════════════════════════════════════════
 
-function clearAllAppCache() {
+function invalidateCache(cacheKey) {
   try {
-    invalidateAllCache();
-    const msg = 'Cache sistem berhasil dibersihkan pada ' + new Date().toLocaleString('id-ID');
-    console.log(msg);
-    try { SpreadsheetApp.getUi().alert('✅ Cache Dibersihkan', msg, SpreadsheetApp.getUi().ButtonSet.OK); } catch (_) {}
-    return { success: true, message: msg };
-  } catch (e) {
-    console.error('clearAllAppCache error:', e.message);
-    return { success: false, message: e.message };
-  }
+    CacheService.getScriptCache().remove(cacheKey);
+  } catch (_) {}
+}
+
+function invalidateAllCaches() {
+  try {
+    CacheService.getScriptCache().removeAll([
+      'master_kategori',
+      'master_akun',
+      'master_akun_aktif',
+      'saldo_akun'
+    ]);
+  } catch (_) {}
 }
 
 
 // ══════════════════════════════════════════════════════════════
-//  TRIGGER SETUP (tidak berubah)
+//  UTILITY: onOpen menu / trigger setup
 // ══════════════════════════════════════════════════════════════
 
-function setupDailyTriggers() {
-  const ui = SpreadsheetApp.getUi();
-  try {
-    const allTriggers = ScriptApp.getProjectTriggers();
-    let removed = 0;
-    allTriggers.forEach(t => {
-      if (t.getHandlerFunction() === 'clearAllAppCache') {
-        ScriptApp.deleteTrigger(t); removed++;
-      }
-    });
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🏦 Keuangan Keluarga')
+    .addItem('⚙️ Setup Schema', 'setupSchema')
+    .addItem('🔄 Rebuild Saldo', 'rebuildSaldoAkun')
+    .addItem('🗑️ Hapus Cache', 'invalidateAllCaches')
+    .addToUi();
+}
 
-    ScriptApp.newTrigger('clearAllAppCache')
-      .timeBased().everyDays(1).atHour(0).create();
-
-    const msg = `Trigger harian berhasil dipasang.\n${removed > 0 ? `${removed} trigger lama dihapus.\n` : ''}Cache dibersihkan otomatis tiap hari jam 00:00–01:00.`;
-    console.log(msg);
-    ui.alert('✅ Trigger Dipasang', msg, ui.ButtonSet.OK);
-  } catch (e) {
-    console.error('setupDailyTriggers error:', e.message);
-    ui.alert('❌ Error', 'Gagal memasang trigger: ' + e.message, ui.ButtonSet.OK);
-  }
+function doGet(e) {
+  return HtmlService
+    .createTemplateFromFile('ui_Index')
+    .evaluate()
+    .setTitle(APP_CONFIG.APP_NAME)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

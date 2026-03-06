@@ -2,20 +2,22 @@
  * GLOBAL CONFIGURATION
  * Sistem Keuangan Keluarga — Snifx
  *
- * v2.2.0 → v1.1.0:
- *   - Tambah SHEETS.CICILAN (sheet baru Cicilan_Tracking)
- *   - Tambah tipe akun CREDIT_CARD & PAYLATER
- *   - Tambah CICILAN status constants
- *   - Tambah DSR threshold (warning 25%, danger 30%)
- *   - Tambah CATEGORY.BAYAR_TAGIHAN_ID untuk pembayaran tagihan CC
+ * v1.2.0 (Hutang & Piutang):
+ *   - Tambah SHEETS.HUTANG_PIUTANG
+ *   - Tambah CATEGORY.PIUTANG_OUT, PIUTANG_IN, BAYAR_HUTANG, NO_AKUN
+ *   - Tambah STATUS.HP_AKTIF, HP_LUNAS
  *
- * PENTING: Nama sheet di bawah harus sama persis dengan nama tab di Google Sheets.
+ * v1.1.0 (Cicilan & CC):
+ *   - Tambah SHEETS.CICILAN, tipe akun CREDIT_CARD & PAYLATER
+ *   - Tambah CICILAN status constants, DSR threshold
+ *
+ * PENTING: Nama sheet harus sama persis dengan nama tab di Google Sheets.
  * PENTING: Nama kolom (header) harus lowercase snake_case.
- * Jalankan "Setup Schema" dari menu setelah deploy untuk memastikan semua kolom ada.
+ * Jalankan "Setup Schema" dari menu setelah deploy.
  */
 const APP_CONFIG = {
   APP_NAME   : "Sistem Keuangan Keluarga",
-  APP_VERSION: "1.1.0",
+  APP_VERSION: "1.2.0",
   SCHEMA_VERSION: "2026-06",
 
   // ─── Nama Sheet ────────────────────────────────────────────────────────────
@@ -28,14 +30,15 @@ const APP_CONFIG = {
     REKAP           : "Rekap_Bulanan",
     SALDO           : "Saldo_Akun",
     ARISAN          : "Arisan_Tracking",
-    CICILAN         : "Cicilan_Tracking"    // v1.1 NEW
+    CICILAN         : "Cicilan_Tracking",
+    HUTANG_PIUTANG  : "Hutang_Piutang"     // v1.2 NEW
   },
 
   // ─── Tipe Transaksi ────────────────────────────────────────────────────────
   TIPE: {
     PENDAPATAN : "PENDAPATAN",
     PENGELUARAN: "PENGELUARAN",
-    TRANSFER   : "TRANSFER"   // pergeseran saldo internal antar akun (v2.2)
+    TRANSFER   : "TRANSFER"
   },
 
   // ─── Tipe Akun ─────────────────────────────────────────────────────────────
@@ -45,12 +48,11 @@ const APP_CONFIG = {
     E_WALLET   : "E-WALLET",
     TABUNGAN   : "TABUNGAN",
     INVESTASI  : "INVESTASI",
-    CREDIT_CARD: "CREDIT_CARD",   // v1.1 NEW — saldo = utang (negatif)
-    PAYLATER   : "PAYLATER"       // v1.1 NEW — saldo = utang (negatif)
+    CREDIT_CARD: "CREDIT_CARD",
+    PAYLATER   : "PAYLATER"
   },
 
   // ─── Tipe akun yang bersifat utang (saldo negatif = utang) ────────────────
-  // Digunakan di berbagai modul untuk membedakan logika saldo
   TIPE_AKUN_UTANG: ["CREDIT_CARD", "PAYLATER"],
 
   // ─── Status ────────────────────────────────────────────────────────────────
@@ -70,17 +72,34 @@ const APP_CONFIG = {
     MASTER_ARSIP: "TIDAK",
     // Cicilan (v1.1)
     CICILAN_AKTIF : "AKTIF",
-    CICILAN_LUNAS : "LUNAS"
+    CICILAN_LUNAS : "LUNAS",
+    // Hutang & Piutang (v1.2)
+    HP_AKTIF: "AKTIF",
+    HP_LUNAS: "LUNAS"
   },
 
   // ─── Kategori Khusus ───────────────────────────────────────────────────────
   CATEGORY: {
     ARISAN_IN         : "K005",
     ARISAN_OUT        : "K601",
-    TRANSFER_ID       : "_TRANSFER_",      // v2.2: tidak masuk laporan 50/30/20
-    BAYAR_TAGIHAN_ID  : "_BAYAR_TAGIHAN_"  // v1.1: pembayaran tagihan CC/Paylater
-                                            // (hanya transfer internal, bukan pengeluaran)
+    TRANSFER_ID       : "_TRANSFER_",       // tidak masuk laporan 50/30/20 & Sankey
+    BAYAR_TAGIHAN_ID  : "_BAYAR_TAGIHAN_",  // v1.1: bayar tagihan CC/Paylater
+    // v1.2 Hutang & Piutang
+    PIUTANG_OUT       : "_PIUTANG_OUT_",    // dana keluar piutang — exclude budget, potong saldo
+    PIUTANG_IN        : "_PIUTANG_IN_",     // dana kembali piutang — masuk statistik terpisah
+    BAYAR_HUTANG      : "_BAYAR_HUTANG_",   // bayar hutang — exclude budget, potong saldo
+    NO_AKUN           : "_NO_AKUN_"         // akun virtual hutang — tidak potong saldo
   },
+
+  // ─── Kategori yang dikecualikan dari budget 50/30/20 ──────────────────────
+  // Digunakan di getDashboardData() dan getSankeyData()
+  EXCLUDE_FROM_BUDGET: [
+    "_TRANSFER_",
+    "_BAYAR_TAGIHAN_",
+    "_PIUTANG_OUT_",
+    "_PIUTANG_IN_",
+    "_BAYAR_HUTANG_"
+  ],
 
   // ─── Target Metode 50/30/20 ────────────────────────────────────────────────
   BUDGET_TARGET: {
@@ -90,10 +109,9 @@ const APP_CONFIG = {
   },
 
   // ─── DSR (Debt Service Ratio) Threshold ───────────────────────────────────
-  // Persentase cicilan utang terhadap total pendapatan
   DSR_THRESHOLD: {
-    WARNING: 25,   // kuning — mulai perlu waspada
-    DANGER : 30    // merah  — sudah tidak sehat
+    WARNING: 25,
+    DANGER : 30
   },
 
   // ─── Cache TTL ─────────────────────────────────────────────────────────────

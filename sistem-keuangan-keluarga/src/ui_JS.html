@@ -14,7 +14,9 @@ const APP_STATE = {
   modalAction       : null,
   currentTab        : '',
   currentMasterTab  : 'kategori',
-  cicilanData       : []   // v1.1: cache cicilan list
+  cicilanData       : [],   // v1.1: cache cicilan list
+  currentHPTab      : 'hutang',   // v1.2
+  hpData            : []          // v1.2
 };
 
 // ══════════════════════════════════════════════════════════════════
@@ -55,7 +57,7 @@ function switchTab(tabName) {
     navBtn.classList.add('active');
   }  // ← FIX: closing brace yang hilang dipindah ke sini
 
-  if (tabName === 'cicilan' || tabName === 'arisan' || tabName === 'master') {
+  if (tabName === 'cicilan' || tabName === 'arisan' || tabName === 'master' || tabName === 'hutangpiutang') {
     if (lainnyaBtn) lainnyaBtn.classList.add('active');
   }
 
@@ -70,6 +72,7 @@ function switchTab(tabName) {
   if (tabName === 'arisan')  loadArisan();
   if (tabName === 'master')  loadMaster();
   if (tabName === 'cicilan') loadCicilan();
+  if (tabName === 'hutangpiutang') loadHP();  // v1.2
 }
 
 function openLainnyaDrawer() {
@@ -267,6 +270,9 @@ function renderDashboard(data) {
   }
 
   // Render 50/30/20 Budget vs Realisasi
+  if (data.hutang_piutang) {
+    renderDashboardHP(data.hutang_piutang);
+  }  
   const b = data.budget5020;
   render5020Dashboard(b, s.total_pendapatan);
 
@@ -2305,5 +2311,453 @@ function confirmLunasCicilan(idCicilan, namaBrang) {
 //  - loadSankey() sekarang dipanggil dari loadDashboard() success handler
 //  - switchTab() closing brace diperbaiki
 // ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+//  v1.2 — HUTANG & PIUTANG MODULE
+//  Tambahan murni — tidak mengubah fungsi yang sudah ada
+// ══════════════════════════════════════════════════════════════════
+
+// ── Sub-tab navigation ─────────────────────────────────────────────
+function switchHPTab(tabName) {
+  ['hutang','piutang','riwayat'].forEach(t => {
+    const c = document.getElementById('hpcontent-' + t);
+    const b = document.getElementById('hptab-' + t);
+    if (c) c.classList.add('hidden');
+    if (b) b.classList.remove('active');
+  });
+  const content = document.getElementById('hpcontent-' + tabName);
+  const btn     = document.getElementById('hptab-' + tabName);
+  if (content) content.classList.remove('hidden');
+  if (btn) btn.classList.add('active');
+  APP_STATE.currentHPTab = tabName;
+}
+
+// ── Load & Render ──────────────────────────────────────────────────
+function loadHP() {
+  show('hp-loader');
+  ['hutang','piutang','riwayat'].forEach(t => {
+    hide('hpcontent-' + t);
+    const b = document.getElementById('hptab-' + t);
+    if (b) b.classList.remove('active');
+  });
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hide('hp-loader');
+      if (res.success) {
+        APP_STATE.hpData = res.data || [];
+        renderHP(APP_STATE.hpData);
+        switchHPTab(APP_STATE.currentHPTab || 'hutang');
+      } else {
+        showToast('❌ ' + res.message, 'error');
+        switchHPTab('hutang');
+      }
+    })
+    .withFailureHandler(err => {
+      hide('hp-loader');
+      showToast('❌ ' + err.message, 'error');
+      switchHPTab('hutang');
+    })
+    .getHutangPiutangList();
+}
+
+function renderHP(list) {
+  const hutang  = list.filter(hp => hp.tipe === 'HUTANG'  && hp.status === 'AKTIF');
+  const piutang = list.filter(hp => hp.tipe === 'PIUTANG' && hp.status === 'AKTIF');
+  const riwayat = list.filter(hp => hp.status === 'LUNAS');
+
+  // Hutang Aktif
+  const hutangEl = document.getElementById('hp-hutang-list');
+  if (hutangEl) {
+    if (hutang.length > 0) {
+      hutangEl.innerHTML = hutang.map(hp => renderHPCard(hp)).join('');
+      hide('hp-hutang-empty');
+    } else {
+      hutangEl.innerHTML = '';
+      show('hp-hutang-empty');
+    }
+  }
+
+  // Piutang Aktif
+  const piutangEl = document.getElementById('hp-piutang-list');
+  if (piutangEl) {
+    if (piutang.length > 0) {
+      piutangEl.innerHTML = piutang.map(hp => renderHPCard(hp)).join('');
+      hide('hp-piutang-empty');
+    } else {
+      piutangEl.innerHTML = '';
+      show('hp-piutang-empty');
+    }
+  }
+
+  // Riwayat (Lunas)
+  const riwEl = document.getElementById('hp-riwayat-list');
+  if (riwEl) {
+    if (riwayat.length > 0) {
+      riwEl.innerHTML = riwayat.map(hp => renderHPCard(hp)).join('');
+      hide('hp-riwayat-empty');
+    } else {
+      riwEl.innerHTML = '';
+      show('hp-riwayat-empty');
+    }
+  }
+}
+
+function renderHPCard(hp) {
+  const isHutang  = hp.tipe === 'HUTANG';
+  const isLunas   = hp.status === 'LUNAS';
+  const total     = parseFloat(hp.total_pinjaman)  || 0;
+  const terbayar  = parseFloat(hp.total_terbayar)  || 0;
+  const sisa      = Math.max(0, total - terbayar);
+  const pct       = total > 0 ? Math.min(100, Math.round((terbayar / total) * 100)) : 0;
+
+  // Jatuh tempo
+  let jatuhTempoHtml = '';
+  if (hp.tanggal_jatuh_tempo) {
+    const jt      = new Date(hp.tanggal_jatuh_tempo);
+    const now     = new Date();
+    const diffDay = Math.round((jt - now) / (1000*60*60*24));
+    const isOver  = diffDay < 0;
+    const label   = isOver ? `⚠️ Lewat ${Math.abs(diffDay)} hari` :
+                    diffDay === 0 ? '🚨 Jatuh tempo hari ini!' :
+                    `⏰ ${diffDay} hari lagi`;
+    const color   = isOver || diffDay <= 3 ? '#dc2626' : diffDay <= 7 ? '#d97706' : 'var(--text-muted)';
+    jatuhTempoHtml = `<p style="font-size:10px;font-weight:700;color:${color};margin-top:4px;">${label} · ${jt.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'})}</p>`;
+  }
+
+  const badgeClass = isHutang ? 'badge-hp-hutang' : 'badge-hp-piutang';
+  const badgeLabel = isHutang ? '🔴 HUTANG' : '🟢 PIUTANG';
+  const fillClass  = isLunas ? 'lunas' : (isHutang ? 'hutang' : 'piutang');
+
+  const actionBtns = isLunas ? '' : (isHutang ? `
+    <div class="flex gap-2 mt-3">
+      <button onclick="openBayarHutangModal('${esc(hp.id_hp)}')"
+        class="btn-primary" style="padding:9px 12px;font-size:12px;border-radius:11px;">
+        💸 Bayar Sebagian
+      </button>
+      <button onclick="confirmLunasHP('${esc(hp.id_hp)}','${esc(hp.nama_pihak)}')"
+        class="btn-secondary" style="padding:9px 12px;font-size:12px;border-radius:11px;flex:none">
+        ✓ Lunas
+      </button>
+    </div>` : `
+    <div class="flex gap-2 mt-3">
+      <button onclick="openTerimaKembaliModal('${esc(hp.id_hp)}')"
+        class="btn-primary" style="padding:9px 12px;font-size:12px;border-radius:11px;">
+        💰 Terima Kembali
+      </button>
+      <button onclick="confirmLunasHP('${esc(hp.id_hp)}','${esc(hp.nama_pihak)}')"
+        class="btn-secondary" style="padding:9px 12px;font-size:12px;border-radius:11px;flex:none">
+        ✓ Lunas
+      </button>
+    </div>`);
+
+  return `
+    <div class="hp-card ${isLunas ? 'hp-lunas' : ''}">
+      <div class="flex justify-between items-start mb-1">
+        <div style="flex:1;min-width:0">
+          <p style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(hp.nama_pihak)}</p>
+          <div class="flex items-center gap-2 mt-0.5">
+            <span class="badge ${badgeClass}">${badgeLabel}</span>
+            ${isLunas ? '<span class="badge badge-green">✅ Lunas</span>' : ''}
+          </div>
+          ${hp.deskripsi ? `<p style="font-size:11px;color:var(--text-muted);margin-top:3px">${esc(hp.deskripsi)}</p>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:8px">
+          <p style="font-size:14px;font-weight:900;color:${isHutang?'#b91c1c':'var(--primary)'};">${formatRupiah(total)}</p>
+          ${!isLunas ? `<p style="font-size:9px;color:var(--text-muted)">Sisa ${formatRupiah(sisa)}</p>` : ''}
+        </div>
+      </div>
+      <div class="hp-progress-wrap">
+        <div class="hp-progress-fill ${fillClass}" style="width:${pct}%"></div>
+      </div>
+      <div class="flex justify-between" style="margin-top:2px">
+        <span style="font-size:9px;color:var(--text-muted)">${formatRupiah(terbayar)} terbayar (${pct}%)</span>
+        ${!isLunas ? `<span style="font-size:9px;font-weight:700;color:${isHutang?'#dc2626':'var(--primary)'}">${formatRupiah(sisa)} lagi</span>` : ''}
+      </div>
+      ${jatuhTempoHtml}
+      ${actionBtns}
+    </div>`;
+}
+
+// ── Dashboard HP Block ─────────────────────────────────────────────
+function renderDashboardHP(hpData) {
+  const blockEl = document.getElementById('dash-hp-block');
+  if (!blockEl || !hpData) return;
+
+  const aktifHutang  = (hpData.list || []).filter(hp => hp.tipe === 'HUTANG'  && hp.status === 'AKTIF');
+  const aktifPiutang = (hpData.list || []).filter(hp => hp.tipe === 'PIUTANG' && hp.status === 'AKTIF');
+  const totalHutang  = aktifHutang.reduce( (s,hp) => s + Math.max(0, (parseFloat(hp.total_pinjaman)||0) - (parseFloat(hp.total_terbayar)||0)), 0);
+  const totalPiutang = aktifPiutang.reduce((s,hp) => s + Math.max(0, (parseFloat(hp.total_pinjaman)||0) - (parseFloat(hp.total_terbayar)||0)), 0);
+
+  if (aktifHutang.length === 0 && aktifPiutang.length === 0) {
+    blockEl.classList.add('hidden');
+    return;
+  }
+
+  blockEl.classList.remove('hidden');
+  setText('dash-hp-hutang',  formatRupiah(totalHutang));
+  setText('dash-hp-piutang', formatRupiah(totalPiutang));
+
+  // Reminders
+  const remEl = document.getElementById('dash-hp-reminders');
+  if (remEl && hpData.reminders && hpData.reminders.length > 0) {
+    remEl.innerHTML = `<p style="font-size:10px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;">⏰ Jatuh Tempo (7 hari ke depan)</p>` +
+      hpData.reminders.map(r => {
+        const isOver   = r.sudah_lewat;
+        const dotClass = isOver ? 'overdue' : (r.tipe === 'HUTANG' ? 'hutang' : 'piutang');
+        const label    = isOver ? `❗ Lewat ${r.hari_lagi} hari` :
+                         r.hari_lagi === 0 ? '🚨 Hari ini!' : `${r.hari_lagi} hari lagi`;
+        return `<div class="hp-reminder-item ${isOver?'overdue':''}">
+          <div class="hp-reminder-dot ${dotClass}"></div>
+          <div style="flex:1;min-width:0">
+            <span style="font-weight:700">${esc(r.nama_pihak)}</span>
+            <span style="color:var(--text-muted)"> · ${r.tipe === 'HUTANG' ? 'Hutang ke' : 'Piutang dari'}</span>
+          </div>
+          <span style="font-weight:800;color:${isOver?'#dc2626':'#d97706'};font-size:10px;">${label}</span>
+        </div>`;
+      }).join('');
+  } else if (remEl) {
+    remEl.innerHTML = '';
+  }
+}
+
+// ── Modal: Catat Hutang / Piutang Baru ────────────────────────────
+function openAddHPModal(tipe) {
+  const isHutang    = tipe === 'HUTANG';
+  const akunOptions = buildAkunOptions(a => !['CREDIT_CARD','PAYLATER'].includes((a.tipe_akun||'').toUpperCase()));
+  const katOptions  = APP_STATE.masterKategori
+    .filter(k => k.tipe === 'PENGELUARAN')
+    .map(k => `<option value="${esc(k.id_kategori)}" data-nama="${esc(k.nama_kategori)}">${esc(k.nama_kategori)} (${esc(k.pos||'-')})</option>`)
+    .join('');
+  const today = new Date().toISOString().split('T')[0];
+
+  document.getElementById('modal-title').textContent = isHutang ? '🔴 Catat Hutang Baru' : '🟢 Catat Piutang Baru';
+  document.getElementById('modal-body').innerHTML = `
+    <input type="hidden" id="fhp-tipe" value="${tipe}">
+    <div class="info-box" style="font-size:11px;">
+      ${isHutang
+        ? '🔴 <strong>Hutang:</strong> Budget terpotong sekarang. Saldo terpotong saat Anda bayar ke pemberi pinjaman.'
+        : '🟢 <strong>Piutang:</strong> Saldo terpotong sekarang. Dicatat kembali saat penerima mengembalikan uang.'}
+    </div>
+    <div>
+      <label class="form-label">${isHutang ? 'Nama Pemberi Pinjaman' : 'Nama Peminjam'} <span class="text-red-400">*</span></label>
+      <input type="text" id="fhp-nama" placeholder="${isHutang ? 'Contoh: Kak Budi' : 'Contoh: Andi'}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Deskripsi / Tujuan <span class="text-red-400">*</span></label>
+      <input type="text" id="fhp-deskripsi" placeholder="${isHutang ? 'Contoh: Beli tiket pesawat' : 'Contoh: Patungan makan'}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Jumlah (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="fhp-jumlah" placeholder="0" min="1" class="form-control" style="font-size:20px;font-weight:800;">
+    </div>
+    ${isHutang ? `
+    <div>
+      <label class="form-label">Kategori Budget <span class="text-red-400">*</span></label>
+      <select id="fhp-kategori" class="form-control">
+        <option value="">-- Pilih Kategori --</option>
+        ${katOptions}
+      </select>
+      <p class="text-xs text-muted mt-1">Untuk memotong budget 50/30/20 bulan ini</p>
+    </div>` : `
+    <div>
+      <label class="form-label">Dari Akun (Dana Keluar) <span class="text-red-400">*</span></label>
+      <select id="fhp-akun" class="form-control">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>`}
+    <div>
+      <label class="form-label">Tanggal <span class="text-red-400">*</span></label>
+      <input type="date" id="fhp-tanggal" value="${today}" class="form-control">
+    </div>
+    <div>
+      <label class="form-label">Jatuh Tempo <span class="text-gray-400 font-normal">(opsional)</span></label>
+      <input type="date" id="fhp-jatuh-tempo" class="form-control">
+      <p class="text-xs text-muted mt-1">Kosongkan jika tidak ada deadline</p>
+    </div>
+    <div>
+      <label class="form-label">Keterangan</label>
+      <input type="text" id="fhp-keterangan" placeholder="Opsional" class="form-control">
+    </div>`;
+
+  APP_STATE.modalAction = submitAddHP;
+  openModal();
+}
+
+function submitAddHP() {
+  const tipe     = val('fhp-tipe');
+  const isHutang = tipe === 'HUTANG';
+  const nama     = val('fhp-nama');
+  const deskripsi= val('fhp-deskripsi');
+  const jumlah   = val('fhp-jumlah');
+  const tanggal  = val('fhp-tanggal');
+  const jatuhTempo = val('fhp-jatuh-tempo');
+  const keterangan = val('fhp-keterangan');
+
+  if (!nama)    { markInvalid('fhp-nama');    showToast('Nama wajib diisi.', 'error'); return; }
+  if (!deskripsi){ markInvalid('fhp-deskripsi'); showToast('Deskripsi wajib diisi.', 'error'); return; }
+  if (!jumlah || parseFloat(jumlah) <= 0) { markInvalid('fhp-jumlah'); showToast('Jumlah harus > 0.', 'error'); return; }
+  if (!tanggal) { markInvalid('fhp-tanggal'); showToast('Tanggal wajib diisi.', 'error'); return; }
+
+  const data = { tipe, nama_pihak: nama, deskripsi, total_pinjaman: jumlah, tanggal, tanggal_jatuh_tempo: jatuhTempo, keterangan };
+
+  if (isHutang) {
+    const idKat = val('fhp-kategori');
+    if (!idKat) { markInvalid('fhp-kategori'); showToast('Kategori wajib dipilih.', 'error'); return; }
+    const katSel = document.getElementById('fhp-kategori');
+    const katNama = katSel ? (katSel.options[katSel.selectedIndex]?.getAttribute('data-nama') || '') : '';
+    data.id_kategori  = idKat;
+    data.nama_kategori = katNama;
+  } else {
+    const idAkun = val('fhp-akun');
+    if (!idAkun) { markInvalid('fhp-akun'); showToast('Akun wajib dipilih.', 'error'); return; }
+    data.id_akun = idAkun;
+  }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal();
+        showToast('✅ ' + res.message, 'success');
+        loadHP();
+        if (APP_STATE.currentTab === 'dashboard') loadDashboard();
+      } else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .addHutangPiutang(data);
+}
+
+// ── Modal: Bayar Hutang ────────────────────────────────────────────
+function openBayarHutangModal(idHP) {
+  const hp = (APP_STATE.hpData || []).find(h => h.id_hp === idHP);
+  const akunOptions = buildAkunOptions(a => !['CREDIT_CARD','PAYLATER'].includes((a.tipe_akun||'').toUpperCase()));
+  const today = new Date().toISOString().split('T')[0];
+  const sisa  = hp ? Math.max(0, (parseFloat(hp.total_pinjaman)||0) - (parseFloat(hp.total_terbayar)||0)) : 0;
+
+  document.getElementById('modal-title').textContent = '💸 Bayar Hutang';
+  document.getElementById('modal-body').innerHTML = `
+    ${hp ? `<div class="info-box">
+      <p style="font-size:12px;font-weight:800">Hutang ke: ${esc(hp.nama_pihak)}</p>
+      <p style="font-size:11px;margin-top:2px">Sisa: <strong>${formatRupiah(sisa)}</strong></p>
+      <p style="font-size:10px;color:var(--text-muted);margin-top:2px">Budget terpotong, saldo akun terpotong</p>
+    </div>` : ''}
+    <div>
+      <label class="form-label">Jumlah Bayar (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="fbh-jumlah" value="${sisa || ''}" placeholder="0" min="1" class="form-control" style="font-size:18px;font-weight:800;">
+    </div>
+    <div>
+      <label class="form-label">Dari Akun <span class="text-red-400">*</span></label>
+      <select id="fbh-akun" class="form-control">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Tanggal <span class="text-red-400">*</span></label>
+      <input type="date" id="fbh-tanggal" value="${today}" class="form-control">
+    </div>
+    <input type="hidden" id="fbh-id-hp" value="${esc(idHP)}">`;
+
+  APP_STATE.modalAction = submitBayarHutang;
+  openModal();
+}
+
+function submitBayarHutang() {
+  const idHP   = val('fbh-id-hp');
+  const jumlah = val('fbh-jumlah');
+  const idAkun = val('fbh-akun');
+  const tanggal= val('fbh-tanggal');
+
+  if (!jumlah || parseFloat(jumlah) <= 0) { markInvalid('fbh-jumlah'); showToast('Jumlah harus > 0.', 'error'); return; }
+  if (!idAkun) { markInvalid('fbh-akun');   showToast('Pilih akun sumber.', 'error'); return; }
+  if (!tanggal){ markInvalid('fbh-tanggal');showToast('Tanggal wajib diisi.', 'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal(); showToast('✅ ' + res.message, 'success');
+        loadHP();
+        if (APP_STATE.currentTab === 'dashboard') loadDashboard();
+      } else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .bayarHutang({ id_hp: idHP, id_akun: idAkun, jumlah, tanggal });
+}
+
+// ── Modal: Terima Kembali Piutang ──────────────────────────────────
+function openTerimaKembaliModal(idHP) {
+  const hp = (APP_STATE.hpData || []).find(h => h.id_hp === idHP);
+  const akunOptions = buildAkunOptions(a => !['CREDIT_CARD','PAYLATER'].includes((a.tipe_akun||'').toUpperCase()));
+  const today = new Date().toISOString().split('T')[0];
+  const sisa  = hp ? Math.max(0, (parseFloat(hp.total_pinjaman)||0) - (parseFloat(hp.total_terbayar)||0)) : 0;
+
+  document.getElementById('modal-title').textContent = '💰 Terima Kembali Piutang';
+  document.getElementById('modal-body').innerHTML = `
+    ${hp ? `<div class="info-box" style="background:#f0fdf4;border-color:#bbf7d0">
+      <p style="font-size:12px;font-weight:800;color:#166534">Piutang dari: ${esc(hp.nama_pihak)}</p>
+      <p style="font-size:11px;margin-top:2px;color:#15803d">Sisa piutang: <strong>${formatRupiah(sisa)}</strong></p>
+      <p style="font-size:10px;color:var(--text-muted);margin-top:2px">Masuk sebagai pendapatan "Penerimaan Piutang"</p>
+    </div>` : ''}
+    <div>
+      <label class="form-label">Jumlah Diterima (Rp) <span class="text-red-400">*</span></label>
+      <input type="number" id="ftk-jumlah" value="${sisa || ''}" placeholder="0" min="1" class="form-control" style="font-size:18px;font-weight:800;">
+    </div>
+    <div>
+      <label class="form-label">Masuk ke Akun <span class="text-red-400">*</span></label>
+      <select id="ftk-akun" class="form-control">
+        <option value="">-- Pilih Akun --</option>
+        ${akunOptions}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Tanggal <span class="text-red-400">*</span></label>
+      <input type="date" id="ftk-tanggal" value="${today}" class="form-control">
+    </div>
+    <input type="hidden" id="ftk-id-hp" value="${esc(idHP)}">`;
+
+  APP_STATE.modalAction = submitTerimaKembali;
+  openModal();
+}
+
+function submitTerimaKembali() {
+  const idHP   = val('ftk-id-hp');
+  const jumlah = val('ftk-jumlah');
+  const idAkun = val('ftk-akun');
+  const tanggal= val('ftk-tanggal');
+
+  if (!jumlah || parseFloat(jumlah) <= 0) { markInvalid('ftk-jumlah'); showToast('Jumlah harus > 0.', 'error'); return; }
+  if (!idAkun) { markInvalid('ftk-akun');   showToast('Pilih akun tujuan.', 'error'); return; }
+  if (!tanggal){ markInvalid('ftk-tanggal');showToast('Tanggal wajib diisi.', 'error'); return; }
+
+  setModalLoading(true);
+  google.script.run
+    .withSuccessHandler(res => {
+      setModalLoading(false);
+      if (res.success) {
+        closeModal(); showToast('✅ ' + res.message, 'success');
+        loadHP();
+        if (APP_STATE.currentTab === 'dashboard') loadDashboard();
+      } else showToast('❌ ' + res.message, 'error');
+    })
+    .withFailureHandler(err => { setModalLoading(false); showToast('❌ ' + err.message, 'error'); })
+    .terimaKembalianPiutang({ id_hp: idHP, id_akun: idAkun, jumlah, tanggal });
+}
+
+// ── Confirm Lunas Manual ───────────────────────────────────────────
+function confirmLunasHP(idHP, namaPihak) {
+  if (!confirm(`Tandai sebagai LUNAS?\n\n"${namaPihak}"\n\nGunakan ini hanya jika pembayaran tidak melalui sistem (sudah diselesaikan di luar aplikasi).`)) return;
+  google.script.run
+    .withSuccessHandler(res => {
+      showToast(res.success ? '✅ ' + res.message : '❌ ' + res.message, res.success ? 'success' : 'error');
+      if (res.success) { loadHP(); if (APP_STATE.currentTab === 'dashboard') loadDashboard(); }
+    })
+    .withFailureHandler(err => showToast('❌ ' + err.message, 'error'))
+    .lunasHP(idHP);
+}
 
 </script>

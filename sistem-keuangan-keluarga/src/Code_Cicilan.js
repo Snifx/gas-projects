@@ -447,16 +447,3 @@ function lunasCicilan(idCicilan) {
     return { success: false, message: e.message };
   }
 }
-
-
-// ══════════════════════════════════════════════════════════════
-//  HELPER INTERNAL
-// ══════════════════════════════════════════════════════════════
-
-/**
- * Format angka ke Rupiah (untuk pesan log backend).
- * @private
- */
-function formatRupiah_(angka) {
-  return 'Rp ' + (parseFloat(angka) || 0).toLocaleString('id-ID');
-}
