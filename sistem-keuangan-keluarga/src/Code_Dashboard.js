@@ -1,26 +1,31 @@
 /**
  * MODUL: DASHBOARD ENGINE
- * v1.1 CHANGES:
- *   - getDashboardData(): tambah block utang_kredit (total utang, DSR, reminders)
- *   - _computeSaldoFromTransaksi(): akun CC/Paylater dihitung correct (utang negatif)
- *   - getSankeyData(): tidak berubah
+ * v1.2.1 FIX:
+ *   - _buildHPData(): return { list, reminders } — sesuai ekspektasi renderDashboardHP() di ui_JS
+ *   - _buildHPData(): hapus pemanggilan getHPReminders() yg tidak ada (fungsinya: _getHPReminders, private)
+ *   - _buildHPData(): hapus penggunaan h.sisa_tagihan yg tidak ada di schema
  *
- * STRUKTUR RETURN getDashboardData() v1.1:
- *   data.statistik         — total_pendapatan, total_pengeluaran, surplus, saldo
- *   data.budget5020        — kebutuhan, keinginan, tabungan (target vs realisasi)
- *   data.akun              — saldo per akun (termasuk CC/Paylater)
- *   data.utang_kredit ← NEW v1.1
- *     .total_utang_berjalan  — total saldo negatif semua akun CC/Paylater
- *     .dsr                   — { persen, status: 'AMAN'|'WARNING'|'DANGER', cicilan_per_bulan }
- *     .future_liability      — proyeksi beban 6 bulan ke depan
- *     .bill_reminders        — tagihan jatuh tempo dalam 7 hari
+ * v1.2 CHANGES:
+ *   - getDashboardData(): tambah blok hutang_piutang
+ *   - getDashboardData(): total_piutang_diterima sebagai stat terpisah
+ *   - Semua agregasi budget sekarang exclude _BAYAR_HUTANG_, _PIUTANG_OUT_, _PIUTANG_IN_
+ *   - getSankeyData(): exclude kategori HP dari diagram
+ *   - _buildHPData(): helper baru untuk blok hutang_piutang
+ *
+ * v1.1 CHANGES:
+ *   - getDashboardData(): tambah block utang_kredit (CC/Cicilan)
+ *
+ * STRUKTUR RETURN getDashboardData() v1.2:
+ *   data.statistik          — total_pendapatan, total_pengeluaran, surplus,
+ *                             saldo, total_piutang_diterima (NEW)
+ *   data.budget5020         — kebutuhan, keinginan, tabungan
+ *   data.akun               — saldo per akun
+ *   data.utang_kredit       — DSR, future liability, bill reminders
+ *   data.hutang_piutang ← NEW v1.2
+ *     .list                 — semua record HP (ui_JS hitung total dari list)
+ *     .reminders            — jatuh tempo dalam 7 hari
  */
 
-/**
- * Mengambil ringkasan data keuangan untuk dashboard.
- * @param  {string} bulan - Format "YYYY-MM"
- * @return {Object} Result JSON
- */
 function getDashboardData(bulan) {
   try {
     // ── 1. BATCH READ: Transaksi ────────────────────────────────────────────
@@ -30,10 +35,9 @@ function getDashboardData(bulan) {
     dataTrx.shift();
 
     // ── 2. Load Master ──────────────────────────────────────────────────────
-    const katResult  = getMasterKategori();
+    const katResult = getMasterKategori();
     if (!katResult.success) throw new Error('Gagal load Master Kategori: ' + katResult.message);
 
-    // Saldo: dari sheet atau hitung dinamis (fallback)
     const saldoResult = getMasterSaldoAkun();
     let saldoData = (saldoResult.success && saldoResult.data.length > 0)
       ? saldoResult.data
@@ -57,28 +61,45 @@ function getDashboardData(bulan) {
       else if (pos.includes('TABUNGAN') || pos.includes('INVESTASI')) budgetTabungan  += nom;
     });
 
-    // ── 6. Single-Pass Aggregation Transaksi ───────────────────────────────
-    let totalPendapatan    = 0;
-    let totalPengeluaran   = 0;
-    let totalArisanIuran   = 0;
-    let realisasiKebutuhan = 0;
-    let realisasiKeinginan = 0;
-    let realisasiTabungan  = 0;
+    // ── 6. Kategori yang dikecualikan dari budget 50/30/20 ──────────────────
+    const EXCLUDE_CATS = new Set(APP_CONFIG.EXCLUDE_FROM_BUDGET || [
+      APP_CONFIG.CATEGORY.TRANSFER_ID,
+      APP_CONFIG.CATEGORY.BAYAR_TAGIHAN_ID,
+      APP_CONFIG.CATEGORY.PIUTANG_OUT,
+      APP_CONFIG.CATEGORY.PIUTANG_IN,
+      APP_CONFIG.CATEGORY.BAYAR_HUTANG,
+      APP_CONFIG.CATEGORY.NO_AKUN
+    ]);
+
+    // ── 7. Single-Pass Aggregation Transaksi ───────────────────────────────
+    let totalPendapatan      = 0;
+    let totalPengeluaran     = 0;
+    let totalArisanIuran     = 0;
+    let totalPiutangDiterima = 0;  // v1.2: pendapatan kembali piutang (terpisah)
+    let realisasiKebutuhan   = 0;
+    let realisasiKeinginan   = 0;
+    let realisasiTabungan    = 0;
 
     dataTrx.forEach(row => {
       const trx      = mapRowToObject(row, headerTrx);
       const trxBulan = trx.bulan ? trx.bulan.toString().substring(0, 7) : '';
-      if (trxBulan !== bulan)                       return;
-      if (trx.status_hapus === APP_CONFIG.STATUS.HAPUS) return;
+      if (trxBulan !== bulan)                            return;
+      if (trx.status_hapus === APP_CONFIG.STATUS.HAPUS)  return;
 
-      const nominal    = parseFloat(trx.jumlah) || 0;
-      const isTransfer = trx.id_kategori === APP_CONFIG.CATEGORY.TRANSFER_ID;
+      const nominal   = parseFloat(trx.jumlah) || 0;
+      const isExclude = EXCLUDE_CATS.has(trx.id_kategori);
 
       if (trx.tipe === APP_CONFIG.TIPE.PENDAPATAN) {
-        if (!isTransfer) totalPendapatan += nominal;
+        // _PIUTANG_IN_ masuk statistik terpisah, bukan totalPendapatan utama
+        if (trx.id_kategori === APP_CONFIG.CATEGORY.PIUTANG_IN) {
+          totalPiutangDiterima += nominal;
+        } else if (!isExclude) {
+          totalPendapatan += nominal;
+        }
 
       } else if (trx.tipe === APP_CONFIG.TIPE.PENGELUARAN) {
-        if (!isTransfer) {
+        // Hanya hitung pengeluaran yang bukan kategori excluded
+        if (!isExclude) {
           totalPengeluaran += nominal;
 
           const katInfo = katMap[trx.id_kategori];
@@ -93,10 +114,11 @@ function getDashboardData(bulan) {
             totalArisanIuran += nominal;
           }
         }
+        // _NO_AKUN_ hutang: id_kategori = kategori asli user → sudah terhitung di atas ✓
       }
     });
 
-    // ── 7. Kalkulasi 50/30/20 ───────────────────────────────────────────────
+    // ── 8. Kalkulasi 50/30/20 ───────────────────────────────────────────────
     const surplusDefisit  = totalPendapatan - totalPengeluaran;
     const targetKebutuhan = totalPendapatan * (APP_CONFIG.BUDGET_TARGET.KEBUTUHAN / 100);
     const targetKeinginan = totalPendapatan * (APP_CONFIG.BUDGET_TARGET.KEINGINAN / 100);
@@ -105,7 +127,7 @@ function getDashboardData(bulan) {
     const persen = (part, total) =>
       total > 0 ? parseFloat(((part / total) * 100).toFixed(1)) : 0;
 
-    // ── 8. Format Saldo Akun ─────────────────────────────────────────────────
+    // ── 9. Format Saldo Akun ─────────────────────────────────────────────────
     const ringkasanSaldo = saldoData.map(akun => {
       const saldoAkhir = parseFloat(akun.saldo_akhir) || 0;
       const isUtang    = _isAkunUtang(akun.tipe_akun);
@@ -124,12 +146,14 @@ function getDashboardData(bulan) {
       };
     });
 
-    // Total saldo: akun reguler saja (CC/Paylater tidak masuk total saldo bersih)
-    const totalSaldo     = ringkasanSaldo.filter(a => !a.is_utang).reduce((s, a) => s + a.saldo_akhir, 0);
-    const totalUtang     = ringkasanSaldo.filter(a => a.is_utang) .reduce((s, a) => s + Math.abs(Math.min(a.saldo_akhir, 0)), 0);
+    const totalSaldo = ringkasanSaldo.filter(a => !a.is_utang).reduce((s, a) => s + a.saldo_akhir, 0);
+    const totalUtang = ringkasanSaldo.filter(a => a.is_utang) .reduce((s, a) => s + Math.abs(Math.min(a.saldo_akhir, 0)), 0);
 
-    // ── 9. v1.1: Data Utang & Kredit ───────────────────────────────────────
+    // ── 10. v1.1: Data Utang Kredit (CC/Cicilan) ────────────────────────────
     const utangKreditData = _buildUtangKreditData(totalPendapatan, totalUtang);
+
+    // ── 11. v1.2: Data Hutang & Piutang Personal ────────────────────────────
+    const hutangPiutangData = _buildHPData();
 
     return {
       success: true,
@@ -137,12 +161,13 @@ function getDashboardData(bulan) {
         bulan        : bulan,
         bulan_display: bulanToDisplay(bulan),
         statistik: {
-          total_pendapatan : totalPendapatan,
-          total_pengeluaran: totalPengeluaran,
-          surplus_defisit  : surplusDefisit,
-          total_arisan     : totalArisanIuran,
-          total_saldo      : totalSaldo,
-          total_utang      : totalUtang      // v1.1: total utang CC/Paylater
+          total_pendapatan      : totalPendapatan,
+          total_pengeluaran     : totalPengeluaran,
+          surplus_defisit       : surplusDefisit,
+          total_arisan          : totalArisanIuran,
+          total_saldo           : totalSaldo,
+          total_utang           : totalUtang,
+          total_piutang_diterima: totalPiutangDiterima  // v1.2
         },
         rasio: {
           kebutuhan_persen : persen(realisasiKebutuhan, totalPengeluaran),
@@ -175,8 +200,9 @@ function getDashboardData(bulan) {
             aktual_pct: persen(realisasiTabungan, totalPendapatan)
           }
         },
-        akun        : ringkasanSaldo,
-        utang_kredit: utangKreditData   // v1.1 NEW
+        akun           : ringkasanSaldo,
+        utang_kredit   : utangKreditData,    // v1.1
+        hutang_piutang : hutangPiutangData   // v1.2
       }
     };
 
@@ -187,13 +213,11 @@ function getDashboardData(bulan) {
 }
 
 /**
- * Membangun blok data utang_kredit untuk dashboard.
- * Dipanggil dari getDashboardData(), dipisah agar testable.
+ * Membangun blok data utang_kredit (CC/Cicilan) untuk dashboard.
  * @private
  */
 function _buildUtangKreditData(totalPendapatan, totalUtangCC) {
   try {
-    // DSR = total cicilan per bulan / total pendapatan × 100
     const totalCicilanPerBulan = getTotalCicilanPerBulan();
     const dsrPersen = totalPendapatan > 0
       ? parseFloat(((totalCicilanPerBulan / totalPendapatan) * 100).toFixed(1))
@@ -201,11 +225,9 @@ function _buildUtangKreditData(totalPendapatan, totalUtangCC) {
     const dsrStatus = dsrPersen >= APP_CONFIG.DSR_THRESHOLD.DANGER  ? 'DANGER'  :
                       dsrPersen >= APP_CONFIG.DSR_THRESHOLD.WARNING ? 'WARNING' : 'AMAN';
 
-    // Future Liability (6 bulan ke depan)
     const futureLiabilityResult = getFutureLiability(6);
     const futureLiability = futureLiabilityResult.success ? futureLiabilityResult.data : [];
 
-    // Bill Reminders (tagihan ≤7 hari)
     const remindersResult = getBillReminders(7);
     const billReminders   = remindersResult.success ? remindersResult.data : [];
 
@@ -224,13 +246,40 @@ function _buildUtangKreditData(totalPendapatan, totalUtangCC) {
 
   } catch (e) {
     console.error('_buildUtangKreditData error:', e.message);
-    // Non-critical — kembalikan struktur kosong agar dashboard tetap render
     return {
       total_utang_berjalan: 0,
       dsr             : { persen: 0, status: 'AMAN', cicilan_per_bulan: 0, threshold_warning: 25, threshold_danger: 30 },
       future_liability: [],
       bill_reminders  : []
     };
+  }
+}
+
+/**
+ * Membangun blok data hutang_piutang untuk dashboard.
+ * Non-critical — mengembalikan struktur kosong jika error.
+ *
+ * FIX v1.2.1:
+ *   - Return { list, reminders } agar cocok dengan renderDashboardHP() di ui_JS
+ *   - getHutangPiutangList() sudah menghitung reminders secara internal via _getHPReminders()
+ *   - Hapus pemanggilan getHPReminders() yang tidak ada (fungsi itu private: _getHPReminders)
+ * @private
+ */
+function _buildHPData() {
+  try {
+    const result = getHutangPiutangList();
+    if (!result.success) throw new Error(result.message);
+
+    // ui_JS renderDashboardHP() menghitung total dari list secara langsung di frontend
+    return {
+      list     : result.data      || [],
+      reminders: result.reminders || []
+    };
+
+  } catch (e) {
+    console.error('_buildHPData error:', e.message);
+    // Non-critical — kembalikan struktur kosong agar dashboard tetap render
+    return { list: [], reminders: [] };
   }
 }
 
@@ -269,7 +318,7 @@ function getAvailableMonths() {
 
 
 // ══════════════════════════════════════════════════════════════
-//  SANKEY DIAGRAM DATA  (tidak berubah dari v2.2)
+//  SANKEY DIAGRAM DATA
 // ══════════════════════════════════════════════════════════════
 
 function getSankeyData(bulan) {
@@ -289,19 +338,30 @@ function getSankeyData(bulan) {
     katResult.data.forEach(k  => { katMap[k.id_kategori] = k.nama_kategori || k.id_kategori; });
     akunResult.data.forEach(a => { akunMap[a.id_akun]    = a.nama_akun    || a.id_akun;    });
 
-    const TRANSFER_ID = APP_CONFIG.CATEGORY.TRANSFER_ID;
-    const pendAkun    = {};
-    const akunKeluar  = {};
+    // v1.2: Exclude semua kategori HP dari sankey (hanya tampilkan cashflow nyata)
+    const EXCLUDE_CATS = new Set(APP_CONFIG.EXCLUDE_FROM_BUDGET || [
+      APP_CONFIG.CATEGORY.TRANSFER_ID,
+      APP_CONFIG.CATEGORY.BAYAR_TAGIHAN_ID,
+      APP_CONFIG.CATEGORY.PIUTANG_OUT,
+      APP_CONFIG.CATEGORY.PIUTANG_IN,
+      APP_CONFIG.CATEGORY.BAYAR_HUTANG
+    ]);
+
+    const pendAkun   = {};
+    const akunKeluar = {};
 
     rawData.forEach(row => {
       const trx = mapRowToObject(row, headerMap);
       const trxBulan = trx.bulan ? trx.bulan.toString().substring(0, 7) : '';
-      if (trxBulan !== bulan)       return;
-      if (trx.status_hapus === APP_CONFIG.STATUS.HAPUS) return;
-      if (trx.id_kategori  === TRANSFER_ID)             return;
+      if (trxBulan !== bulan)                            return;
+      if (trx.status_hapus === APP_CONFIG.STATUS.HAPUS)  return;
+      if (EXCLUDE_CATS.has(trx.id_kategori))             return;  // v1.2: exclude HP categories
 
       const jumlah   = parseFloat(trx.jumlah) || 0;
-      const namaAkun = akunMap[trx.id_akun]   || trx.id_akun    || 'Akun Lain';
+      // Untuk transaksi dengan _NO_AKUN_, tampilkan sebagai "Pinjaman"
+      const namaAkun = trx.id_akun === APP_CONFIG.CATEGORY.NO_AKUN
+        ? 'Pinjaman (Hutang)'
+        : (akunMap[trx.id_akun] || trx.id_akun || 'Akun Lain');
       const namaKat  = katMap[trx.id_kategori] || trx.id_kategori || 'Lainnya';
 
       if (trx.tipe === APP_CONFIG.TIPE.PENDAPATAN) {
@@ -348,18 +408,12 @@ function getSankeyData(bulan) {
 
 
 // ══════════════════════════════════════════════════════════════
-//  PRIVATE HELPER: Hitung Saldo Dinamis  (v2.2 + v1.1 update)
+//  PRIVATE HELPER: Hitung Saldo Dinamis
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Fallback: hitung saldo per akun langsung dari Master_Akun + Transaksi.
- * v1.1: Akun CC/Paylater → saldo_akhir bisa negatif (saldo_awal 0, keluar = utang).
- *
- * Logika saldo per tipe akun:
- *   Akun biasa  : saldo_akhir = saldo_awal + masuk - keluar  (positif = baik)
- *   Akun utang  : saldo_akhir = saldo_awal + masuk - keluar
- *                 (masuk = bayar tagihan masuk ke CC, keluar = belanja pakai CC)
- *                 → saldo negatif = utang yang belum dibayar
+ * Fallback: hitung saldo per akun dari Master_Akun + Transaksi.
+ * v1.2: Transaksi dengan id_akun = _NO_AKUN_ diabaikan (tidak mempengaruhi saldo apapun).
  */
 function _computeSaldoFromTransaksi() {
   try {
@@ -379,6 +433,8 @@ function _computeSaldoFromTransaksi() {
       const trx = mapRowToObject(row, headerTrx);
       if (trx.status_hapus === APP_CONFIG.STATUS.HAPUS) return;
       if (!trx.id_akun) return;
+      // v1.2: skip _NO_AKUN_ — tidak mempengaruhi saldo akun manapun
+      if (trx.id_akun === APP_CONFIG.CATEGORY.NO_AKUN) return;
       if (!acc[trx.id_akun]) return;
 
       const nominal = parseFloat(trx.jumlah) || 0;
@@ -396,8 +452,6 @@ function _computeSaldoFromTransaksi() {
       const masuk     = acc[a.id_akun] ? acc[a.id_akun].masuk  : 0;
       const keluar    = acc[a.id_akun] ? acc[a.id_akun].keluar : 0;
       const isUtang   = _isAkunUtang(a.tipe_akun);
-
-      // Untuk akun utang: saldo_awal biasanya 0, saldo negatif = utang terpakai
       const saldoAkhir = saldoAwal + masuk - keluar;
 
       return {
@@ -410,7 +464,6 @@ function _computeSaldoFromTransaksi() {
         saldo_akhir    : saldoAkhir,
         is_utang       : isUtang,
         limit_kredit   : parseFloat(a.limit_kredit)   || 0,
-        // sisa_limit: limit - |utang terpakai|
         sisa_limit     : isUtang
           ? Math.max(0, (parseFloat(a.limit_kredit) || 0) - Math.abs(Math.min(saldoAkhir, 0)))
           : null,
