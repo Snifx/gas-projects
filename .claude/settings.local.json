@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(clasp --version 2>&1)",
+      "Bash(clasp list:*)",
+      "Bash(clasp login:*)",
+      "Bash(grep -n \"^\\\\s*[a-zA-Z].*\\(\" \"D:/_personalproject/Projects/gas-project/sistem-administrasi-rt/src/Service_Tagihan.js\" | grep -v \"//\")"
+    ]
+  }
+}

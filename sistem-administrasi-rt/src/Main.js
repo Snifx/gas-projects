@@ -79,9 +79,9 @@ function authenticateUser(username, password) {
     return Service_Auth.authenticate(username, password);
   } catch (error) {
     console.error('authenticateUser error:', error);
-    return { 
-      success: false, 
-      message: 'Terjadi kesalahan sistem: ' + error.message 
+    return {
+      success: false,
+      message: 'Terjadi kesalahan sistem: ' + error.message
     };
   }
 }
@@ -98,9 +98,9 @@ function changePassword(username, oldPassword, newPassword) {
     return Service_Auth.changePassword(username, oldPassword, newPassword);
   } catch (error) {
     console.error('changePassword error:', error);
-    return { 
-      success: false, 
-      message: 'Terjadi kesalahan sistem: ' + error.message 
+    return {
+      success: false,
+      message: 'Terjadi kesalahan sistem: ' + error.message
     };
   }
 }
@@ -117,34 +117,34 @@ function getDashboardStats() {
   try {
     const allRumah = Service_Rumah.getAll();
     const allKK = Service_KK.getAll();
-    
+
     // Calculate stats
     const totalRumah = allRumah.length;
     const rumahTerisi = allRumah.filter(r => r.statusHuni === 'Terisi').length;
     const rumahKosong = allRumah.filter(r => r.statusHuni === 'Kosong').length;
-    
+
     const totalKK = allKK.length;
     const kkAktif = allKK.filter(kk => kk.statusTinggal === 'Tetap' || kk.statusTinggal === 'Kontrak').length;
-    
+
     // Count by Jalan
     const rumahByJalan = {};
     const kkByJalan = {};
-    
+
     allRumah.forEach(r => {
       const jalan = r.jalan || 'Unknown';
       rumahByJalan[jalan] = (rumahByJalan[jalan] || 0) + 1;
     });
-    
+
     allKK.forEach(kk => {
       const jalan = kk.jalan || 'Unknown';
       kkByJalan[jalan] = (kkByJalan[jalan] || 0) + 1;
     });
-    
+
     // Get iuran summary (current year)
     const currentYear = new Date().getFullYear();
     let totalIuranTerbayar = 0;
     let totalIuranBelumBayar = 0;
-    
+
     allRumah.forEach(rumah => {
       if (rumah.iuranHistory && rumah.iuranHistory[currentYear]) {
         const yearData = rumah.iuranHistory[currentYear];
@@ -155,7 +155,7 @@ function getDashboardStats() {
         });
       }
     });
-    
+
     return {
       success: true,
       data: {
@@ -180,9 +180,9 @@ function getDashboardStats() {
     };
   } catch (error) {
     console.error('getDashboardStats error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal mengambil statistik: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal mengambil statistik: ' + error.message
     };
   }
 }
@@ -229,11 +229,11 @@ function getRumahDetail(rumahId) {
     if (!rumah) {
       return { success: false, message: 'Rumah tidak ditemukan' };
     }
-    
+
     // Get KK yang tinggal di rumah ini
     const allKK = Service_KK.getAll();
     const kkList = allKK.filter(kk => kk.rumahId === rumahId);
-    
+
     return {
       success: true,
       data: {
@@ -257,9 +257,9 @@ function createRumah(rumahData) {
     return Service_Rumah.create(rumahData);
   } catch (error) {
     console.error('createRumah error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal membuat rumah: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal membuat rumah: ' + error.message
     };
   }
 }
@@ -275,9 +275,9 @@ function updateRumah(rumahId, rumahData) {
     return Service_Rumah.update(rumahId, rumahData);
   } catch (error) {
     console.error('updateRumah error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal mengupdate rumah: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal mengupdate rumah: ' + error.message
     };
   }
 }
@@ -292,9 +292,9 @@ function deleteRumah(rumahId) {
     return Service_Rumah.delete(rumahId);
   } catch (error) {
     console.error('deleteRumah error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal menghapus rumah: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal menghapus rumah: ' + error.message
     };
   }
 }
@@ -307,24 +307,24 @@ function deleteRumah(rumahId) {
 function getFilteredRumah(filters) {
   try {
     let data = Service_Rumah.getAll();
-    
+
     if (filters.jalan && filters.jalan !== 'all') {
       data = data.filter(r => r.jalan === filters.jalan);
     }
-    
+
     if (filters.statusHuni && filters.statusHuni !== 'all') {
       data = data.filter(r => r.statusHuni === filters.statusHuni);
     }
-    
+
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      data = data.filter(r => 
+      data = data.filter(r =>
         (r.nomorRumah && r.nomorRumah.toLowerCase().includes(searchLower)) ||
         (r.jalan && r.jalan.toLowerCase().includes(searchLower)) ||
         (r.namaPemilik && r.namaPemilik.toLowerCase().includes(searchLower))
       );
     }
-    
+
     return data;
   } catch (error) {
     console.error('getFilteredRumah error:', error);
@@ -374,13 +374,13 @@ function getKKDetail(kkId) {
     if (!kk) {
       return { success: false, message: 'KK tidak ditemukan' };
     }
-    
+
     // Get rumah info
     let rumahInfo = null;
     if (kk.rumahId) {
       rumahInfo = Service_Rumah.getById(kk.rumahId);
     }
-    
+
     return {
       success: true,
       data: {
@@ -404,9 +404,9 @@ function createKK(kkData) {
     return Service_KK.create(kkData);
   } catch (error) {
     console.error('createKK error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal membuat KK: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal membuat KK: ' + error.message
     };
   }
 }
@@ -422,9 +422,9 @@ function updateKK(kkId, kkData) {
     return Service_KK.update(kkId, kkData);
   } catch (error) {
     console.error('updateKK error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal mengupdate KK: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal mengupdate KK: ' + error.message
     };
   }
 }
@@ -439,9 +439,9 @@ function deleteKK(kkId) {
     return Service_KK.delete(kkId);
   } catch (error) {
     console.error('deleteKK error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal menghapus KK: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal menghapus KK: ' + error.message
     };
   }
 }
@@ -454,24 +454,24 @@ function deleteKK(kkId) {
 function getFilteredKK(filters) {
   try {
     let data = Service_KK.getAll();
-    
+
     if (filters.jalan && filters.jalan !== 'all') {
       data = data.filter(kk => kk.jalan === filters.jalan);
     }
-    
+
     if (filters.statusTinggal && filters.statusTinggal !== 'all') {
       data = data.filter(kk => kk.statusTinggal === filters.statusTinggal);
     }
-    
+
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      data = data.filter(kk => 
+      data = data.filter(kk =>
         (kk.nomorKK && kk.nomorKK.toLowerCase().includes(searchLower)) ||
         (kk.namaKepalaKeluarga && kk.namaKepalaKeluarga.toLowerCase().includes(searchLower)) ||
         (kk.alamat && kk.alamat.toLowerCase().includes(searchLower))
       );
     }
-    
+
     return data;
   } catch (error) {
     console.error('getFilteredKK error:', error);
@@ -496,13 +496,13 @@ function getIuranRumah(rumahId, year) {
     if (!rumah) {
       return { success: false, message: 'Rumah tidak ditemukan' };
     }
-    
+
     const targetYear = year || new Date().getFullYear();
     const iuranData = rumah.iuranHistory ? rumah.iuranHistory[targetYear] : null;
-    
+
     // Get komponen iuran
     const komponenIuran = getKomponenIuran();
-    
+
     return {
       success: true,
       data: {
@@ -536,9 +536,9 @@ function updateIuranPayment(rumahId, year, bulan, paymentData) {
     return Service_Iuran.recordPayment(rumahId, year, bulan, paymentData);
   } catch (error) {
     console.error('updateIuranPayment error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal mengupdate iuran: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal mengupdate iuran: ' + error.message
     };
   }
 }
@@ -553,14 +553,14 @@ function getIuranReport(year, bulan) {
   try {
     const allRumah = Service_Rumah.getAll();
     const report = [];
-    
+
     allRumah.forEach(rumah => {
       if (rumah.statusHuni === 'Terisi') {
         const iuranData = rumah.iuranHistory ? rumah.iuranHistory[year] : {};
-        
+
         let totalBayar = 0;
         let totalBulanBayar = 0;
-        
+
         if (bulan) {
           // Specific month
           const bulanData = iuranData ? iuranData[bulan] : null;
@@ -578,7 +578,7 @@ function getIuranReport(year, bulan) {
             }
           }
         }
-        
+
         report.push({
           rumahId: rumah.rumahId,
           jalan: rumah.jalan,
@@ -590,7 +590,7 @@ function getIuranReport(year, bulan) {
         });
       }
     });
-    
+
     return {
       success: true,
       data: {
@@ -637,9 +637,9 @@ function updateKomponenIuran(komponenList) {
     return Model_Konfigurasi.updateKomponenIuran(komponenList);
   } catch (error) {
     console.error('updateKomponenIuran error:', error);
-    return { 
-      success: false, 
-      message: 'Gagal mengupdate komponen: ' + error.message 
+    return {
+      success: false,
+      message: 'Gagal mengupdate komponen: ' + error.message
     };
   }
 }
@@ -652,13 +652,13 @@ function getJalanList() {
   try {
     const allRumah = Service_Rumah.getAll();
     const jalanSet = new Set();
-    
+
     allRumah.forEach(r => {
       if (r.jalan) {
         jalanSet.add(r.jalan);
       }
     });
-    
+
     return Array.from(jalanSet).sort();
   } catch (error) {
     console.error('getJalanList error:', error);
@@ -674,12 +674,12 @@ function getAvailableYears() {
   try {
     const currentYear = new Date().getFullYear();
     const years = [];
-    
+
     // Return last 3 years + current + next year
     for (let y = currentYear - 2; y <= currentYear + 1; y++) {
       years.push(y);
     }
-    
+
     return years;
   } catch (error) {
     console.error('getAvailableYears error:', error);
@@ -699,10 +699,10 @@ function getAvailableYears() {
 function exportRumahToCSV() {
   try {
     const allRumah = Service_Rumah.getAll();
-    
+
     // CSV Header
     const headers = ['ID', 'Jalan', 'Nomor Rumah', 'Status Huni', 'Nama Pemilik', 'No HP', 'Email'];
-    
+
     // CSV Rows
     const rows = allRumah.map(r => [
       r.rumahId || '',
@@ -713,7 +713,7 @@ function exportRumahToCSV() {
       r.noHpPemilik || '',
       r.emailPemilik || ''
     ]);
-    
+
     return {
       success: true,
       data: {
@@ -735,10 +735,10 @@ function exportRumahToCSV() {
 function exportKKToCSV() {
   try {
     const allKK = Service_KK.getAll();
-    
+
     // CSV Header
     const headers = ['ID', 'Nomor KK', 'Nama Kepala Keluarga', 'Alamat', 'Status Tinggal', 'Jumlah ART', 'No HP'];
-    
+
     // CSV Rows
     const rows = allKK.map(kk => [
       kk.kkId || '',
@@ -749,7 +749,7 @@ function exportKKToCSV() {
       kk.jumlahART || '',
       kk.noHp || ''
     ]);
-    
+
     return {
       success: true,
       data: {
@@ -789,16 +789,16 @@ function getAllKomponen() {
       console.error('getAllKomponen: Sheet not found');
       return [];
     }
-    
+
     const data = sheet.getDataRange().getValues();
     const result = [];
-    
+
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (!row[COLUMNS.KOMPONEN.ID]) continue;
-      
+
       const nominal = NumberUtils.toNumber(row[COLUMNS.KOMPONEN.NOMINAL]);
-      
+
       result.push({
         komponenId: StringUtils.clean(row[COLUMNS.KOMPONEN.ID]),
         namaKomponen: StringUtils.clean(row[COLUMNS.KOMPONEN.NAMA]),
@@ -809,10 +809,10 @@ function getAllKomponen() {
         rowIndex: i + 1
       });
     }
-    
+
     console.log('getAllKomponen: Found ' + result.length + ' records');
     return result;
-    
+
   } catch (error) {
     console.error('getAllKomponen error:', error);
     return [];
@@ -832,9 +832,9 @@ function createKomponen(data) {
       satuan: data.satuan,
       nominal: data.nominal
     });
-    
+
     return result;
-    
+
   } catch (error) {
     console.error('createKomponen error:', error);
     return { success: false, message: error.message };
@@ -855,9 +855,9 @@ function updateKomponen(komponenId, data) {
     if (data.satuan !== undefined) updateData.satuan = data.satuan;
     if (data.nominal !== undefined) updateData.nominal = data.nominal;
     if (data.status !== undefined) updateData.status = data.status;
-    
+
     return Model_Komponen.update(komponenId, updateData);
-    
+
   } catch (error) {
     console.error('updateKomponen error:', error);
     return { success: false, message: error.message };
@@ -891,34 +891,34 @@ function getIuranByRumahId(rumahId) {
   try {
     // Get rumah info using Model_Rumah
     const rumahInfo = Model_Rumah.getById(rumahId);
-    
+
     if (!rumahInfo) {
       return { success: false, message: 'Rumah tidak ditemukan' };
     }
-    
+
     // Get all komponen for lookup
     const allKomponen = getAllKomponen();
     const komponenMap = {};
     allKomponen.forEach(k => {
       komponenMap[k.komponenId] = k;
     });
-    
+
     // Get iuran data using Model_Iuran
     const iuranList = Model_Iuran.getByRumahId(rumahId);
-    
+
     // Transform data for frontend
     const transformedList = [];
     let totalIuran = 0;
-    
+
     iuranList.forEach(iuran => {
       const komponen = komponenMap[iuran.komponenId] || {};
-      
+
       const nominalDefault = iuran.nominalDefault || 0;
       const nominalOverride = iuran.nominalOverride !== null ? iuran.nominalOverride : nominalDefault;
       const qty = iuran.qty || 0;
       const total = iuran.total || 0;
       const keringanan = nominalDefault - nominalOverride;
-      
+
       transformedList.push({
         komponenId: iuran.komponenId,
         namaKomponen: komponen.namaKomponen || 'Unknown',
@@ -933,10 +933,10 @@ function getIuranByRumahId(rumahId) {
         total: total,
         totalFormatted: 'Rp ' + total.toLocaleString('id-ID')
       });
-      
+
       totalIuran += total;
     });
-    
+
     return {
       success: true,
       data: {
@@ -955,7 +955,7 @@ function getIuranByRumahId(rumahId) {
         totalIuranFormatted: 'Rp ' + totalIuran.toLocaleString('id-ID')
       }
     };
-    
+
   } catch (error) {
     console.error('getIuranByRumahId error:', error);
     return { success: false, message: error.message };
@@ -975,20 +975,20 @@ function addIuranToRumah(rumahId, data) {
     if (!komponen) {
       return { success: false, message: 'Komponen tidak ditemukan' };
     }
-    
+
     const nominalDefault = komponen.nominal;
     const nominalOverride = data.nominalOverride !== undefined ? data.nominalOverride : nominalDefault;
     const qty = data.qty || 1;
     const total = nominalOverride * qty;
-    
+
     // Check if already exists
     const existingIuran = Model_Iuran.getByRumahId(rumahId);
     const exists = existingIuran.some(i => i.komponenId === data.komponenId);
-    
+
     if (exists) {
       return { success: false, message: 'Komponen sudah ada untuk rumah ini' };
     }
-    
+
     // Create iuran
     const result = Model_Iuran.create({
       rumahId: rumahId,
@@ -998,14 +998,14 @@ function addIuranToRumah(rumahId, data) {
       qty: qty,
       total: total
     });
-    
+
     if (result.success) {
       // Update total iuran on rumah
       updateRumahTotalIuran(rumahId);
     }
-    
+
     return result;
-    
+
   } catch (error) {
     console.error('addIuranToRumah error:', error);
     return { success: false, message: error.message };
@@ -1024,27 +1024,27 @@ function updateIuranRumah(rumahId, komponenId, data) {
     // Calculate new total
     const existingIuran = Model_Iuran.getByRumahId(rumahId);
     const iuran = existingIuran.find(i => i.komponenId === komponenId);
-    
+
     if (!iuran) {
       return { success: false, message: 'Data iuran tidak ditemukan' };
     }
-    
+
     const nominalOverride = data.nominalOverride !== undefined ? data.nominalOverride : iuran.nominalOverride;
     const qty = data.qty !== undefined ? data.qty : iuran.qty;
     const total = nominalOverride * qty;
-    
+
     const result = Model_Iuran.update(rumahId, komponenId, {
       nominalOverride: nominalOverride,
       qty: qty,
       total: total
     });
-    
+
     if (result.success) {
       updateRumahTotalIuran(rumahId);
     }
-    
+
     return result;
-    
+
   } catch (error) {
     console.error('updateIuranRumah error:', error);
     return { success: false, message: error.message };
@@ -1060,13 +1060,13 @@ function updateIuranRumah(rumahId, komponenId, data) {
 function deleteIuranFromRumah(rumahId, komponenId) {
   try {
     const result = Model_Iuran.delete(rumahId, komponenId);
-    
+
     if (result.success) {
       updateRumahTotalIuran(rumahId);
     }
-    
+
     return result;
-    
+
   } catch (error) {
     console.error('deleteIuranFromRumah error:', error);
     return { success: false, message: error.message };
@@ -1081,11 +1081,11 @@ function updateRumahTotalIuran(rumahId) {
   try {
     const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.DATA_RUMAH);
     if (!sheet) return;
-    
+
     // Get all iuran for this rumah
     const iuranList = Model_Iuran.getByRumahId(rumahId);
     const total = iuranList.reduce((sum, iuran) => sum + (iuran.total || 0), 0);
-    
+
     // Find rumah row and update
     const data = sheet.getDataRange().getValues();
     for (let i = 1; i < data.length; i++) {
@@ -1095,7 +1095,7 @@ function updateRumahTotalIuran(rumahId) {
         break;
       }
     }
-    
+
   } catch (error) {
     console.error('updateRumahTotalIuran error:', error);
   }
@@ -1111,11 +1111,11 @@ function getAvailableKomponenForRumah(rumahId) {
     const allKomponen = getAllKomponen();
     const iuranList = Model_Iuran.getByRumahId(rumahId);
     const usedKomponenIds = iuranList.map(i => i.komponenId);
-    
-    return allKomponen.filter(k => 
+
+    return allKomponen.filter(k =>
       k.status === 'Aktif' && !usedKomponenIds.includes(k.komponenId)
     );
-    
+
   } catch (error) {
     console.error('getAvailableKomponenForRumah error:', error);
     return [];
@@ -1140,22 +1140,22 @@ function getKKByRumahId(rumahId) {
     if (!sheet) {
       return { success: false, message: 'Sheet tidak ditemukan', data: [] };
     }
-    
+
     const data = sheet.getDataRange().getValues();
     const kkList = [];
-    
+
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      
+
       // Skip empty rows
       if (!row[COLUMNS.KK.ID]) continue;
-      
+
       // Check if this KK belongs to the rumah
       if (StringUtils.equals(row[COLUMNS.KK.RUMAH_ID], rumahId)) {
         // Calculate age from tanggal lahir
         let umur = '-';
         const tanggalLahir = row[COLUMNS.KK.TANGGAL_LAHIR];
-        
+
         if (tanggalLahir) {
           try {
             const birthDate = new Date(tanggalLahir);
@@ -1163,11 +1163,11 @@ function getKKByRumahId(rumahId) {
               const today = new Date();
               let age = today.getFullYear() - birthDate.getFullYear();
               const monthDiff = today.getMonth() - birthDate.getMonth();
-              
+
               if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
                 age--;
               }
-              
+
               if (age >= 0) {
                 umur = age + ' tahun';
               }
@@ -1176,7 +1176,7 @@ function getKKByRumahId(rumahId) {
             umur = '-';
           }
         }
-        
+
         kkList.push({
           kkId: StringUtils.clean(row[COLUMNS.KK.ID]),
           rumahId: StringUtils.clean(row[COLUMNS.KK.RUMAH_ID]),
@@ -1193,15 +1193,15 @@ function getKKByRumahId(rumahId) {
         });
       }
     }
-    
+
     console.log('getKKByRumahId: Found ' + kkList.length + ' members for ' + rumahId);
-    
+
     // Return data as array directly (not nested object)
     return {
       success: true,
       data: kkList
     };
-    
+
   } catch (error) {
     console.error('getKKByRumahId error:', error);
     return { success: false, message: error.message, data: [] };
@@ -1217,16 +1217,16 @@ function countKKByRumahId(rumahId) {
   try {
     const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.KARTU_KELUARGA);
     if (!sheet) return 0;
-    
+
     const data = sheet.getDataRange().getValues();
     let count = 0;
-    
+
     for (let i = 1; i < data.length; i++) {
       if (data[i][COLUMNS.KK.ID] && StringUtils.equals(data[i][COLUMNS.KK.RUMAH_ID], rumahId)) {
         count++;
       }
     }
-    
+
     return count;
   } catch (error) {
     console.error('countKKByRumahId error:', error);
@@ -1248,14 +1248,14 @@ function getAllKategoriPembukuan() {
       console.error('getAllKategoriPembukuan: Sheet not found');
       return [];
     }
-    
+
     const data = sheet.getDataRange().getValues();
     const result = [];
-    
+
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (!row[COLUMNS.KATEGORI_PEMBUKUAN.ID]) continue;
-      
+
       result.push({
         kategoriId: StringUtils.clean(row[COLUMNS.KATEGORI_PEMBUKUAN.ID]),
         namaKategori: StringUtils.clean(row[COLUMNS.KATEGORI_PEMBUKUAN.NAMA]),
@@ -1265,10 +1265,10 @@ function getAllKategoriPembukuan() {
         rowIndex: i + 1
       });
     }
-    
+
     console.log('getAllKategoriPembukuan: Found ' + result.length + ' records');
     return result;
-    
+
   } catch (error) {
     console.error('getAllKategoriPembukuan error:', error);
     return [];
@@ -1295,7 +1295,7 @@ function createKategoriPembukuan(data) {
   try {
     const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.KATEGORI_PEMBUKUAN);
     if (!sheet) return { success: false, message: 'Sheet not found' };
-    
+
     // Generate ID
     const sheetData = sheet.getDataRange().getValues();
     let maxNum = 0;
@@ -1305,7 +1305,7 @@ function createKategoriPembukuan(data) {
       if (!isNaN(num) && num > maxNum) maxNum = num;
     }
     const kategoriId = 'KAT' + String(maxNum + 1).padStart(9, '0');
-    
+
     const rowData = [
       kategoriId,
       StringUtils.clean(data.namaKategori),
@@ -1313,11 +1313,11 @@ function createKategoriPembukuan(data) {
       StringUtils.clean(data.tipe),
       'Aktif'
     ];
-    
+
     sheet.appendRow(rowData);
-    
+
     return { success: true, kategoriId: kategoriId, message: 'Kategori berhasil ditambahkan' };
-    
+
   } catch (error) {
     console.error('createKategoriPembukuan error:', error);
     return { success: false, message: error.message };
@@ -1331,19 +1331,19 @@ function updateKategoriPembukuan(kategoriId, data) {
   try {
     const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.KATEGORI_PEMBUKUAN);
     if (!sheet) return { success: false, message: 'Sheet not found' };
-    
+
     const sheetData = sheet.getDataRange().getValues();
     let rowIndex = -1;
-    
+
     for (let i = 1; i < sheetData.length; i++) {
       if (StringUtils.equals(sheetData[i][COLUMNS.KATEGORI_PEMBUKUAN.ID], kategoriId)) {
         rowIndex = i + 1;
         break;
       }
     }
-    
+
     if (rowIndex === -1) return { success: false, message: 'Kategori tidak ditemukan' };
-    
+
     if (data.namaKategori !== undefined) {
       sheet.getRange(rowIndex, COLUMNS.KATEGORI_PEMBUKUAN.NAMA + 1).setValue(StringUtils.clean(data.namaKategori));
     }
@@ -1356,9 +1356,9 @@ function updateKategoriPembukuan(kategoriId, data) {
     if (data.status !== undefined) {
       sheet.getRange(rowIndex, COLUMNS.KATEGORI_PEMBUKUAN.STATUS + 1).setValue(StringUtils.clean(data.status));
     }
-    
+
     return { success: true, message: 'Kategori berhasil diupdate' };
-    
+
   } catch (error) {
     console.error('updateKategoriPembukuan error:', error);
     return { success: false, message: error.message };
@@ -1376,228 +1376,17 @@ function deleteKategoriPembukuan(kategoriId) {
 // TAGIHAN BULANAN API
 // ============================================
 
-/**
- * Get tagihan by rumah ID with fallback to namaJalan + nomorRumah
- * @param {string} rumahId - Rumah ID
- * @param {number} tahun - Year filter (optional)
- * @param {string} namaJalan - Nama jalan for fallback (optional)
- * @param {number} nomorRumah - Nomor rumah for fallback (optional)
- * @return {Object} Result with tagihan list
- */
 function getTagihanByRumahId(rumahId, tahun, namaJalan, nomorRumah) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found', data: [] };
-    
-    const data = sheet.getDataRange().getValues();
-    let result = [];
-    
-    // First try: Query by rumahId
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row[COLUMNS.TAGIHAN.ID]) continue;
-      
-      const rowRumahId = StringUtils.clean(row[COLUMNS.TAGIHAN.RUMAH_ID]);
-      const rowTahun = row[COLUMNS.TAGIHAN.TAHUN];
-      
-      if (rowRumahId === rumahId && (!tahun || rowTahun == tahun)) {
-        result.push(rowToTagihan(row, i + 1));
-      }
-    }
-    
-    // Fallback: If no results and namaJalan + nomorRumah provided
-    if (result.length === 0 && namaJalan && nomorRumah) {
-      for (let i = 1; i < data.length; i++) {
-        const row = data[i];
-        if (!row[COLUMNS.TAGIHAN.ID]) continue;
-        
-        const rowNamaJalan = StringUtils.clean(row[COLUMNS.TAGIHAN.NAMA_JALAN]);
-        const rowNomorRumah = row[COLUMNS.TAGIHAN.NOMOR_RUMAH];
-        const rowTahun = row[COLUMNS.TAGIHAN.TAHUN];
-        
-        if (rowNamaJalan.toLowerCase() === String(namaJalan).toLowerCase() && 
-            String(rowNomorRumah) === String(nomorRumah) && 
-            (!tahun || rowTahun == tahun)) {
-          result.push(rowToTagihan(row, i + 1));
-        }
-      }
-    }
-    
-    // Sort by bulan (month order: Januari -> Desember)
-    const monthOrder = {
-      'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4, 
-      'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8, 
-      'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12
-    };
-    
-    result.sort((a, b) => {
-      const monthA = monthOrder[a.bulan] || 0;
-      const monthB = monthOrder[b.bulan] || 0;
-      return monthA - monthB;
-    });
-    
-    return { success: true, data: result };
-    
-  } catch (error) {
-    console.error('getTagihanByRumahId error:', error);
-    return { success: false, message: error.message, data: [] };
-  }
+  return Service_Tagihan.getByRumahId(rumahId, tahun, namaJalan, nomorRumah);
 }
 
 
-/**
- * Generate tagihan tahunan untuk satu rumah
- */
 function generateTagihanTahunan(rumahId, tahun) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    // Get rumah info
-    const rumah = Model_Rumah.getById(rumahId);
-    if (!rumah) return { success: false, message: 'Rumah tidak ditemukan' };
-    
-    // Get total iuran bulanan dari Iuran_Rumah
-    const iuranResult = getIuranByRumahId(rumahId);
-    if (!iuranResult.success) return { success: false, message: 'Gagal mendapatkan data iuran' };
-    
-    const totalIuran = iuranResult.data.totalIuran || 0;
-    if (totalIuran <= 0) return { success: false, message: 'Total iuran harus lebih dari 0. Pastikan komponen iuran sudah ditambahkan.' };
-    
-    // Check existing
-    const existing = getTagihanByRumahId(rumahId, tahun);
-    const existingIuran = existing.data.filter(t => t.tipe === 'Iuran');
-    
-    if (existingIuran.length >= 12) {
-      return { success: false, message: 'Tagihan tahun ' + tahun + ' sudah lengkap (' + existingIuran.length + ' record)' };
-    }
-    
-    const bulanList = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
-                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    
-    const existingPeriodes = existingIuran.map(t => t.periode);
-    
-    let generatedCount = 0;
-    const now = new Date();
-    const sheetData = sheet.getDataRange().getValues();
-    
-    // Find max ID
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TAGIHAN.ID] || '');
-      const num = parseInt(id.replace('TG', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    
-    for (let m = 0; m < 12; m++) {
-      const bulan = bulanList[m];
-      const periode = tahun + '-' + String(m + 1).padStart(2, '0');
-      
-      if (existingPeriodes.includes(periode)) continue;
-      
-      maxNum++;
-      const tagihanId = 'TG' + String(maxNum).padStart(9, '0');
-      const namaTagihan = 'Iuran RT - ' + rumah.namaJalan + ' ' + rumah.nomorRumah + ' - ' + bulan + ' ' + tahun;
-      
-      const rowData = [
-        tagihanId,
-        rumahId,
-        rumah.namaJalan,
-        rumah.nomorRumah,
-        'Iuran',
-        periode,
-        bulan,
-        tahun,
-        namaTagihan,
-        totalIuran,
-        0,
-        totalIuran,
-        'Belum Lunas',
-        '',
-        '',
-        DateUtils.formatDateTime(now)
-      ];
-      
-      sheet.appendRow(rowData);
-      generatedCount++;
-    }
-    
-    return { 
-      success: true, 
-      message: 'Berhasil generate ' + generatedCount + ' tagihan untuk tahun ' + tahun,
-      count: generatedCount
-    };
-    
-  } catch (error) {
-    console.error('generateTagihanTahunan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.generateTahunan(rumahId, tahun);
 }
 
-/**
- * Import tunggakan existing dari Data_Rumah
- */
 function importTunggakanExisting(rumahId, nominalTunggakan, keterangan) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const rumah = Model_Rumah.getById(rumahId);
-    if (!rumah) return { success: false, message: 'Rumah tidak ditemukan' };
-    
-    const nominal = NumberUtils.toNumber(nominalTunggakan);
-    if (nominal <= 0) return { success: false, message: 'Nominal tunggakan harus lebih dari 0' };
-    
-    // Generate ID
-    const sheetData = sheet.getDataRange().getValues();
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TAGIHAN.ID] || '');
-      const num = parseInt(id.replace('TG', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    const tagihanId = 'TG' + String(maxNum + 1).padStart(9, '0');
-    
-    const now = new Date();
-    const namaTagihan = 'Tunggakan Sebelumnya - ' + rumah.namaJalan + ' ' + rumah.nomorRumah;
-    
-    const rowData = [
-      tagihanId,
-      rumahId,
-      rumah.namaJalan,
-      rumah.nomorRumah,
-      'Tunggakan',
-      'TUNGGAKAN',
-      'Tunggakan',
-      now.getFullYear(),
-      namaTagihan,
-      nominal,
-      0,
-      nominal,
-      'Belum Lunas',
-      '',
-      keterangan || 'Import tunggakan dari data existing',
-      DateUtils.formatDateTime(now)
-    ];
-    
-    sheet.appendRow(rowData);
-    
-    // Reset tunggakan di Data_Rumah
-    const rumahSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.DATA_RUMAH);
-    const rumahData = rumahSheet.getDataRange().getValues();
-    for (let i = 1; i < rumahData.length; i++) {
-      if (StringUtils.equals(rumahData[i][COLUMNS.RUMAH.ID], rumahId)) {
-        rumahSheet.getRange(i + 1, COLUMNS.RUMAH.TUNGGAKAN + 1).setValue(0);
-        break;
-      }
-    }
-    
-    return { success: true, tagihanId: tagihanId, message: 'Tunggakan berhasil diimport' };
-    
-  } catch (error) {
-    console.error('importTunggakanExisting error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.importTunggakan(rumahId, nominalTunggakan, keterangan);
 }
 
 /**
@@ -1607,72 +1396,22 @@ function updateTunggakanRumah(rumahId, nominal) {
   try {
     const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.DATA_RUMAH);
     if (!sheet) return { success: false, message: 'Sheet not found' };
-    
+
     const data = sheet.getDataRange().getValues();
-    
+
     for (let i = 1; i < data.length; i++) {
       if (StringUtils.equals(data[i][COLUMNS.RUMAH.ID], rumahId)) {
         sheet.getRange(i + 1, COLUMNS.RUMAH.TUNGGAKAN + 1).setValue(NumberUtils.toNumber(nominal));
         return { success: true, message: 'Tunggakan berhasil diupdate' };
       }
     }
-    
+
     return { success: false, message: 'Rumah tidak ditemukan' };
-    
+
   } catch (error) {
     console.error('updateTunggakanRumah error:', error);
     return { success: false, message: error.message };
   }
-}
-
-/**
- * Helper: Convert row to tagihan object
- * Fixed: Properly handle Date objects for serialization
- */
-function rowToTagihan(row, rowIndex) {
-  const totalTagihan = NumberUtils.toNumber(row[COLUMNS.TAGIHAN.TOTAL_TAGIHAN]);
-  const totalTerbayar = NumberUtils.toNumber(row[COLUMNS.TAGIHAN.TOTAL_TERBAYAR]);
-  const sisaTagihan = NumberUtils.toNumber(row[COLUMNS.TAGIHAN.SISA_TAGIHAN]);
-  
-  // Handle periode - convert Date to string if needed
-  let periodeStr = '';
-  const periodeRaw = row[COLUMNS.TAGIHAN.PERIODE];
-  if (periodeRaw instanceof Date) {
-    periodeStr = Utilities.formatDate(periodeRaw, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  } else if (periodeRaw) {
-    periodeStr = String(periodeRaw);
-  }
-  
-  // Handle tanggalLunas - convert Date to string if needed
-  let tanggalLunasStr = '';
-  const tanggalLunasRaw = row[COLUMNS.TAGIHAN.TANGGAL_LUNAS];
-  if (tanggalLunasRaw instanceof Date) {
-    tanggalLunasStr = Utilities.formatDate(tanggalLunasRaw, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  } else if (tanggalLunasRaw) {
-    tanggalLunasStr = String(tanggalLunasRaw);
-  }
-  
-  return {
-    tagihanId: StringUtils.clean(row[COLUMNS.TAGIHAN.ID]),
-    rumahId: StringUtils.clean(row[COLUMNS.TAGIHAN.RUMAH_ID]),
-    namaJalan: StringUtils.clean(row[COLUMNS.TAGIHAN.NAMA_JALAN]),
-    nomorRumah: row[COLUMNS.TAGIHAN.NOMOR_RUMAH],
-    tipe: StringUtils.clean(row[COLUMNS.TAGIHAN.TIPE]),
-    periode: periodeStr,
-    bulan: StringUtils.clean(row[COLUMNS.TAGIHAN.BULAN]),
-    tahun: Number(row[COLUMNS.TAGIHAN.TAHUN]) || 0,
-    namaTagihan: StringUtils.clean(row[COLUMNS.TAGIHAN.NAMA_TAGIHAN]),
-    totalTagihan: totalTagihan,
-    totalTagihanFormatted: 'Rp ' + totalTagihan.toLocaleString('id-ID'),
-    totalTerbayar: totalTerbayar,
-    totalTerbayarFormatted: 'Rp ' + totalTerbayar.toLocaleString('id-ID'),
-    sisaTagihan: sisaTagihan,
-    sisaTagihanFormatted: 'Rp ' + sisaTagihan.toLocaleString('id-ID'),
-    status: StringUtils.clean(row[COLUMNS.TAGIHAN.STATUS]),
-    tanggalLunas: tanggalLunasStr,
-    keterangan: StringUtils.clean(row[COLUMNS.TAGIHAN.KETERANGAN]),
-    rowIndex: rowIndex
-  };
 }
 
 /**
@@ -1683,66 +1422,8 @@ function rowToTagihan(row, rowIndex) {
 // TRANSAKSI KAS API
 // ============================================
 
-/**
- * Get all transaksi with filters
- */
 function fetchAllTransaksi(filters) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet not found', data: [], summary: { saldo: 0, saldoFormatted: 'Rp 0', totalPemasukanFormatted: 'Rp 0', totalPengeluaranFormatted: 'Rp 0' } };
-    
-    const data = sheet.getDataRange().getValues();
-    let result = [];
-    let totalPemasukan = 0;
-    let totalPengeluaran = 0;
-    
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row[COLUMNS.TRANSAKSI.ID]) continue;
-      
-      const transaksi = mapRowToTransaksi(row, i + 1);
-      
-      // Calculate totals for saldo (always, before filtering)
-      if (transaksi.jenis === 'Pemasukan') {
-        totalPemasukan += transaksi.nominal;
-      } else {
-        totalPengeluaran += transaksi.nominal;
-      }
-      
-      // Apply filters for display
-      if (filters) {
-        if (filters.kategoriId && transaksi.kategoriId !== filters.kategoriId) continue;
-        if (filters.rumahId && transaksi.rumahId !== filters.rumahId) continue;
-        if (filters.jenis && transaksi.jenis !== filters.jenis) continue;
-        if (filters.tanggalDari && transaksi.tanggal < filters.tanggalDari) continue;
-        if (filters.tanggalSampai && transaksi.tanggal > filters.tanggalSampai) continue;
-      }
-      
-      result.push(transaksi);
-    }
-    
-    // Sort by date descending
-    result.sort(function(a, b) { return (b.tanggal || '').localeCompare(a.tanggal || ''); });
-    
-    const saldo = totalPemasukan - totalPengeluaran;
-    
-    return { 
-      success: true, 
-      data: result,
-      summary: {
-        totalPemasukan: totalPemasukan,
-        totalPemasukanFormatted: 'Rp ' + totalPemasukan.toLocaleString('id-ID'),
-        totalPengeluaran: totalPengeluaran,
-        totalPengeluaranFormatted: 'Rp ' + totalPengeluaran.toLocaleString('id-ID'),
-        saldo: saldo,
-        saldoFormatted: 'Rp ' + saldo.toLocaleString('id-ID')
-      }
-    };
-    
-  } catch (error) {
-    console.error('getAllTransaksi error:', error);
-    return { success: false, message: error.message, data: [], summary: { saldo: 0, saldoFormatted: 'Rp 0', totalPemasukanFormatted: 'Rp 0', totalPengeluaranFormatted: 'Rp 0' } };
-  }
+  return Service_Transaksi.getAll(filters);
 }
 
 function getAllTransaksi(filters) {
@@ -1757,764 +1438,63 @@ function loadKasTransaksi(filters) {
   return fetchAllTransaksi(filters);
 }
 
-/**
- * Get transaksi history for a specific rumah
- * @param {string} rumahId - Rumah ID
- * @return {Object} Result with transaksi list
- */
 function getTransaksiByRumahId(rumahId) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet not found', data: [] };
-    
-    const data = sheet.getDataRange().getValues();
-    const result = [];
-    
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const rowRumahId = StringUtils.clean(row[COLUMNS.TRANSAKSI.RUMAH_ID]);
-      
-      if (StringUtils.equals(rowRumahId, rumahId)) {
-        var rawTanggal = row[COLUMNS.TRANSAKSI.TANGGAL];
-        var tanggalStr = '';
-        if (rawTanggal) {
-          tanggalStr = rawTanggal instanceof Date ? Utilities.formatDate(rawTanggal, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(rawTanggal);
-        }
-        result.push({
-          transaksiId: StringUtils.clean(row[COLUMNS.TRANSAKSI.ID]),
-          tanggal: tanggalStr,
-          jenis: StringUtils.clean(row[COLUMNS.TRANSAKSI.JENIS]),
-          namaKategori: StringUtils.clean(row[COLUMNS.TRANSAKSI.NAMA_KATEGORI]),
-          nominal: NumberUtils.toNumber(row[COLUMNS.TRANSAKSI.NOMINAL]),
-          keterangan: StringUtils.clean(row[COLUMNS.TRANSAKSI.KETERANGAN]),
-          tagihanId: StringUtils.clean(row[COLUMNS.TRANSAKSI.TAGIHAN_ID])
-        });
-      }
-    }
-    
-    result.sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
-    return { success: true, data: result };
-    
-  } catch (error) {
-    console.error('getTransaksiByRumahId error:', error);
-    return { success: false, message: error.message, data: [] };
-  }
+  return Service_Transaksi.getByRumahId(rumahId);
 }
 
-/**
- * Update keterangan for a tagihan
- * @param {string} tagihanId - Tagihan ID
- * @param {string} keterangan - New keterangan
- * @return {Object} Result
- */
 function updateTagihanKeterangan(tagihanId, keterangan) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < data.length; i++) {
-      if (StringUtils.equals(data[i][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        sheet.getRange(i + 1, COLUMNS.TAGIHAN.KETERANGAN + 1).setValue(keterangan || '');
-        return { success: true, message: 'Keterangan berhasil diupdate' };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('updateTagihanKeterangan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.updateKeterangan(tagihanId, keterangan);
 }
 
-/**
- * Update tunggakan (nama, nominal, keterangan)
- * Hanya untuk tipe 'Tunggakan Sebelumnya', bukan tagihan bulanan reguler
- */
 function updateTunggakan(tagihanId, updateData) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < data.length; i++) {
-      if (StringUtils.equals(data[i][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        var rowNum = i + 1;
-        var tipe = String(data[i][COLUMNS.TAGIHAN.TIPE] || '').trim();
-        
-        // Safety: only allow editing tunggakan sebelumnya, not regular monthly bills
-        if (tipe !== 'Tunggakan') {
-          return { success: false, message: 'Hanya tunggakan sebelumnya yang bisa diedit nominal-nya' };
-        }
-        
-        var terbayar = NumberUtils.toNumber(data[i][COLUMNS.TAGIHAN.TOTAL_TERBAYAR]);
-        
-        // Update nama tagihan
-        if (updateData.namaTagihan !== undefined) {
-          sheet.getRange(rowNum, COLUMNS.TAGIHAN.NAMA_TAGIHAN + 1).setValue(updateData.namaTagihan);
-        }
-        
-        // Update nominal (total tagihan)
-        if (updateData.nominal !== undefined) {
-          var newNominal = NumberUtils.toNumber(updateData.nominal);
-          if (newNominal < terbayar) {
-            return { success: false, message: 'Nominal tidak boleh lebih kecil dari jumlah yang sudah dibayar (Rp ' + terbayar.toLocaleString('id-ID') + ')' };
-          }
-          var newSisa = newNominal - terbayar;
-          sheet.getRange(rowNum, COLUMNS.TAGIHAN.TOTAL_TAGIHAN + 1).setValue(newNominal);
-          sheet.getRange(rowNum, COLUMNS.TAGIHAN.SISA_TAGIHAN + 1).setValue(newSisa);
-          
-          // Update status
-          if (newSisa <= 0) {
-            sheet.getRange(rowNum, COLUMNS.TAGIHAN.STATUS + 1).setValue('Lunas');
-          } else {
-            sheet.getRange(rowNum, COLUMNS.TAGIHAN.STATUS + 1).setValue('Belum Lunas');
-            sheet.getRange(rowNum, COLUMNS.TAGIHAN.TANGGAL_LUNAS + 1).setValue('');
-          }
-        }
-        
-        // Update keterangan
-        if (updateData.keterangan !== undefined) {
-          sheet.getRange(rowNum, COLUMNS.TAGIHAN.KETERANGAN + 1).setValue(updateData.keterangan);
-        }
-        
-        return { success: true, message: 'Tunggakan berhasil diupdate' };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('updateTunggakan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.updateTunggakanData(tagihanId, updateData);
 }
 
-/**
- * Delete tunggakan (only Tunggakan Sebelumnya type)
- */
 function deleteTunggakan(tagihanId) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < data.length; i++) {
-      if (StringUtils.equals(data[i][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        var tipe = String(data[i][COLUMNS.TAGIHAN.TIPE] || '').trim();
-        
-        if (tipe !== 'Tunggakan') {
-          return { success: false, message: 'Hanya tunggakan sebelumnya yang bisa dihapus dari sini' };
-        }
-        
-        var terbayar = NumberUtils.toNumber(data[i][COLUMNS.TAGIHAN.TOTAL_TERBAYAR]);
-        if (terbayar > 0) {
-          return { success: false, message: 'Tidak bisa menghapus tunggakan yang sudah ada pembayaran. Hapus dulu pembayarannya di Kas RT.' };
-        }
-        
-        sheet.deleteRow(i + 1);
-        return { success: true, message: 'Tunggakan berhasil dihapus' };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('deleteTunggakan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.deleteTunggakan(tagihanId);
 }
 
-/**
- * Create transaksi pembayaran (dari tagihan)
- */
 function createTransaksiPembayaran(data) {
-  try {
-    const transaksiSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    
-    if (!transaksiSheet) {
-      return { success: false, message: 'Sheet Transaksi_Kas not found' };
-    }
-    
-    const nominal = NumberUtils.toNumber(data.nominal);
-    if (nominal <= 0) return { success: false, message: 'Nominal harus lebih dari 0' };
-    
-    // Get kategori info
-    var namaKategori = 'Iuran RT';
-    if (data.kategoriId) {
-      var kategoriList = getAllKategoriPembukuan();
-      var kategori = kategoriList.find(function(k) { return k.kategoriId === data.kategoriId; });
-      if (kategori) namaKategori = kategori.namaKategori;
-    }
-    
-    // Generate ID
-    const sheetData = transaksiSheet.getDataRange().getValues();
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TRANSAKSI.ID] || '');
-      const num = parseInt(id.replace('TR', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    const transaksiId = 'TR' + String(maxNum + 1).padStart(9, '0');
-    
-    const now = new Date();
-    
-    const rowData = [
-      transaksiId,
-      data.tanggal || DateUtils.formatDate(now),
-      'Pemasukan',
-      data.kategoriId || '',
-      namaKategori,
-      nominal,
-      data.keterangan || '',
-      data.tagihanId || '',
-      data.rumahId || '',
-      data.userInput || 'admin',
-      DateUtils.formatDateTime(now),
-      data.metodePembayaran || "Transfer Bank"
-    ];
-    
-    transaksiSheet.appendRow(rowData);
-    
-    // Update tagihan if linked
-    if (data.tagihanId && tagihanSheet) {
-      updateTagihanAfterPayment(data.tagihanId, nominal, data.tanggal);
-    }
-    
-    return { success: true, transaksiId: transaksiId, message: 'Pembayaran berhasil dicatat' };
-    
-  } catch (error) {
-    console.error('createTransaksiPembayaran error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.createPembayaran(data);
 }
 
 
-/**
- * Create multiple transaksi pembayaran at once (Multi-Bayar)
- * @param {Array} payments - Array of payment data objects
- * @return {Object} Result with count of successful payments
- */
 function createMultiTransaksiPembayaran(payments) {
-  try {
-    if (!Array.isArray(payments) || payments.length === 0) {
-      return { success: false, message: 'Data pembayaran tidak valid' };
-    }
-    
-    const transaksiSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    
-    if (!transaksiSheet) {
-      return { success: false, message: 'Sheet Transaksi_Kas not found' };
-    }
-    
-    // Get current max ID once
-    const sheetData = transaksiSheet.getDataRange().getValues();
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TRANSAKSI.ID] || '');
-      const num = parseInt(id.replace('TR', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    
-    // Get kategori info once
-    var namaKategori = 'Iuran RT';
-    if (payments[0].kategoriId) {
-      var kategoriList = getAllKategoriPembukuan();
-      var kategori = kategoriList.find(function(k) { return k.kategoriId === payments[0].kategoriId; });
-      if (kategori) namaKategori = kategori.namaKategori;
-    }
-    
-    const now = new Date();
-    let successCount = 0;
-    const errors = [];
-    
-    // Process each payment
-    for (let i = 0; i < payments.length; i++) {
-      const data = payments[i];
-      const nominal = NumberUtils.toNumber(data.nominal);
-      
-      if (nominal <= 0) {
-        errors.push('Pembayaran ' + (i + 1) + ': Nominal harus lebih dari 0');
-        continue;
-      }
-      
-      // Generate unique ID
-      maxNum++;
-      const transaksiId = 'TR' + String(maxNum).padStart(9, '0');
-      
-      const rowData = [
-        transaksiId,
-        data.tanggal || DateUtils.formatDate(now),
-        'Pemasukan',
-        data.kategoriId || '',
-        namaKategori,
-        nominal,
-        data.keterangan || '',
-        data.tagihanId || '',
-        data.rumahId || '',
-        data.userInput || 'admin',
-        DateUtils.formatDateTime(now),
-        data.metodePembayaran || "Transfer Bank"
-      ];
-      
-      transaksiSheet.appendRow(rowData);
-      
-      // Update tagihan if linked
-      if (data.tagihanId && tagihanSheet) {
-        updateTagihanAfterPayment(data.tagihanId, nominal, data.tanggal);
-      }
-      
-      successCount++;
-    }
-    
-    if (successCount === 0) {
-      return { success: false, message: errors.join(', ') };
-    }
-    
-    return { 
-      success: true, 
-      count: successCount, 
-      message: successCount + ' pembayaran berhasil dicatat' 
-    };
-    
-  } catch (error) {
-    console.error('createMultiTransaksiPembayaran error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.createMultiPembayaran(payments);
 }
 
-/**
- * Create transaksi pengeluaran
- */
 function createTransaksiPengeluaran(data) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const nominal = NumberUtils.toNumber(data.nominal);
-    if (nominal <= 0) return { success: false, message: 'Nominal harus lebih dari 0' };
-    
-    // Get kategori info
-    var namaKategori = '';
-    if (data.kategoriId) {
-      var kategoriList = getAllKategoriPembukuan();
-      var kategori = kategoriList.find(function(k) { return k.kategoriId === data.kategoriId; });
-      if (kategori) namaKategori = kategori.namaKategori;
-    }
-    
-    // Generate ID
-    const sheetData = sheet.getDataRange().getValues();
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TRANSAKSI.ID] || '');
-      const num = parseInt(id.replace('TR', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    const transaksiId = 'TR' + String(maxNum + 1).padStart(9, '0');
-    
-    const now = new Date();
-    
-    const rowData = [
-      transaksiId,
-      data.tanggal || DateUtils.formatDate(now),
-      'Pengeluaran',
-      data.kategoriId || '',
-      namaKategori,
-      nominal,
-      data.keterangan || '',
-      '',
-      '',
-      data.userInput || 'admin',
-      DateUtils.formatDateTime(now),
-      data.metodePembayaran || "Transfer Bank"
-    ];
-    
-    sheet.appendRow(rowData);
-    
-    return { success: true, transaksiId: transaksiId, message: 'Pengeluaran berhasil dicatat' };
-    
-  } catch (error) {
-    console.error('createTransaksiPengeluaran error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.createPengeluaran(data);
 }
 
-/**
- * Update tagihan after payment
- */
-function updateTagihanAfterPayment(tagihanId, nominalBayar, tanggalBayar) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < data.length; i++) {
-      if (StringUtils.equals(data[i][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        const row = i + 1;
-        const totalTagihan = NumberUtils.toNumber(data[i][COLUMNS.TAGIHAN.TOTAL_TAGIHAN]);
-        const totalTerbayar = NumberUtils.toNumber(data[i][COLUMNS.TAGIHAN.TOTAL_TERBAYAR]) + nominalBayar;
-        const sisaTagihan = totalTagihan - totalTerbayar;
-        
-        sheet.getRange(row, COLUMNS.TAGIHAN.TOTAL_TERBAYAR + 1).setValue(totalTerbayar);
-        sheet.getRange(row, COLUMNS.TAGIHAN.SISA_TAGIHAN + 1).setValue(Math.max(0, sisaTagihan));
-        
-        if (sisaTagihan <= 0) {
-          sheet.getRange(row, COLUMNS.TAGIHAN.STATUS + 1).setValue('Lunas');
-          // Use actual payment date, not processing date
-          var tglLunas = tanggalBayar || DateUtils.formatDate(new Date());
-          sheet.getRange(row, COLUMNS.TAGIHAN.TANGGAL_LUNAS + 1).setValue(tglLunas);
-        }
-        
-        return { success: true };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('updateTagihanAfterPayment error:', error);
-    return { success: false, message: error.message };
-  }
+function updateTagihanAfterPayment(tagihanId) {
+  return Service_Transaksi.recalculateTagihan(tagihanId);
 }
 
-/**
- * Delete transaksi
- */
 function deleteTransaksi(transaksiId) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < data.length; i++) {
-      if (StringUtils.equals(data[i][COLUMNS.TRANSAKSI.ID], transaksiId)) {
-        // Get linked tagihan ID before deleting
-        const linkedTagihanId = StringUtils.clean(data[i][COLUMNS.TRANSAKSI.TAGIHAN_ID]);
-        
-        // Delete the row
-        sheet.deleteRow(i + 1);
-        
-        // Recalculate linked tagihan if exists
-        if (linkedTagihanId) {
-          recalculateTagihanTerbayar(linkedTagihanId);
-        }
-        
-        return { success: true, message: 'Transaksi berhasil dihapus' };
-      }
-    }
-    
-    return { success: false, message: 'Transaksi tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('deleteTransaksi error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.delete(transaksiId);
 }
 
-/**
- * Recalculate Total_Terbayar for a specific tagihan
- * Dipanggil setelah transaksi dihapus untuk menyinkronkan data
- */
 function recalculateTagihanTerbayar(tagihanId) {
-  try {
-    const transaksiSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    
-    if (!transaksiSheet || !tagihanSheet) {
-      return { success: false, message: 'Sheet not found' };
-    }
-    
-    // Calculate sum of all transaksi linked to this tagihan
-    const transaksiData = transaksiSheet.getDataRange().getValues();
-    var totalTerbayar = 0;
-    var latestTanggal = '';
-    
-    for (var i = 1; i < transaksiData.length; i++) {
-      var row = transaksiData[i];
-      if (!row[COLUMNS.TRANSAKSI.ID]) continue;
-      
-      var linkedTagihanId = StringUtils.clean(row[COLUMNS.TRANSAKSI.TAGIHAN_ID]);
-      if (linkedTagihanId === tagihanId) {
-        totalTerbayar += NumberUtils.toNumber(row[COLUMNS.TRANSAKSI.NOMINAL]);
-        // Track the latest payment date
-        var txTanggal = row[COLUMNS.TRANSAKSI.TANGGAL];
-        var txTanggalStr = txTanggal instanceof Date 
-          ? Utilities.formatDate(txTanggal, Session.getScriptTimeZone(), 'yyyy-MM-dd') 
-          : String(txTanggal || '');
-        if (txTanggalStr > latestTanggal) latestTanggal = txTanggalStr;
-      }
-    }
-    
-    // Update tagihan
-    const tagihanData = tagihanSheet.getDataRange().getValues();
-    
-    for (var j = 1; j < tagihanData.length; j++) {
-      if (StringUtils.equals(tagihanData[j][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        var rowNum = j + 1;
-        var totalTagihan = NumberUtils.toNumber(tagihanData[j][COLUMNS.TAGIHAN.TOTAL_TAGIHAN]);
-        var sisaTagihan = totalTagihan - totalTerbayar;
-        
-        tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.TOTAL_TERBAYAR + 1).setValue(totalTerbayar);
-        tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.SISA_TAGIHAN + 1).setValue(Math.max(0, sisaTagihan));
-        
-        // Update status
-        if (sisaTagihan <= 0) {
-          tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.STATUS + 1).setValue('Lunas');
-          // Use actual latest payment date, not processing date
-          var tglLunas = latestTanggal || DateUtils.formatDate(new Date());
-          tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.TANGGAL_LUNAS + 1).setValue(tglLunas);
-        } else {
-          tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.STATUS + 1).setValue('Belum Lunas');
-          tagihanSheet.getRange(rowNum, COLUMNS.TAGIHAN.TANGGAL_LUNAS + 1).setValue('');
-        }
-        
-        console.log('recalculateTagihanTerbayar: ' + tagihanId + ' -> Terbayar=' + totalTerbayar + ', Sisa=' + sisaTagihan);
-        
-        return { 
-          success: true, 
-          message: 'Recalculated: Total Terbayar = ' + totalTerbayar,
-          totalTerbayar: totalTerbayar,
-          sisaTagihan: sisaTagihan
-        };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('recalculateTagihanTerbayar error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.recalculateTagihan(tagihanId);
 }
 
-/**
- * Get total sisa tunggakan for ALL rumah at once
- * More efficient than calling getTagihanByRumahId for each rumah
- * @return {Object} Map of rumahId -> totalSisaTunggakan
- */
 function getAllRumahTunggakan() {
-  try {
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    
-    // Initialize result object
-    const tunggakanMap = {};
-    
-    if (tagihanSheet) {
-      const tagihanData = tagihanSheet.getDataRange().getValues();
-      
-      // Calculate sisa tunggakan per rumah from Tagihan_Bulanan
-      for (let i = 1; i < tagihanData.length; i++) {
-        const row = tagihanData[i];
-        if (!row[COLUMNS.TAGIHAN.ID]) continue;
-        
-        const tipe = StringUtils.clean(row[COLUMNS.TAGIHAN.TIPE]);
-        const status = StringUtils.clean(row[COLUMNS.TAGIHAN.STATUS]);
-        
-        // Only count Tunggakan that is not yet Lunas
-        if (tipe.toLowerCase() === 'tunggakan' && status.toLowerCase() !== 'lunas') {
-          const rumahId = StringUtils.clean(row[COLUMNS.TAGIHAN.RUMAH_ID]);
-          const sisaTagihan = NumberUtils.toNumber(row[COLUMNS.TAGIHAN.SISA_TAGIHAN]);
-          
-          if (!tunggakanMap[rumahId]) {
-            tunggakanMap[rumahId] = 0;
-          }
-          tunggakanMap[rumahId] += sisaTagihan;
-        }
-      }
-    }
-    
-    return { success: true, data: tunggakanMap };
-    
-  } catch (error) {
-    console.error('getAllRumahTunggakan error:', error);
-    return { success: false, message: error.message, data: {} };
-  }
+  return Service_Tagihan.getAllRumahTunggakanMap();
 }
 
-/**
- * Delete tagihan and all related transactions
- * @param {string} tagihanId - Tagihan ID to delete
- * @return {Object} Result
- */
 function deleteTagihan(tagihanId) {
-  try {
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    const transaksiSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    
-    if (!tagihanSheet) {
-      return { success: false, message: 'Sheet Tagihan_Bulanan not found' };
-    }
-    
-    // First, delete all related transactions
-    if (transaksiSheet) {
-      const transaksiData = transaksiSheet.getDataRange().getValues();
-      
-      // Find and delete transactions linked to this tagihan (in reverse order)
-      for (let i = transaksiData.length - 1; i >= 1; i--) {
-        const linkedTagihanId = StringUtils.clean(transaksiData[i][COLUMNS.TRANSAKSI.TAGIHAN_ID]);
-        if (linkedTagihanId === tagihanId) {
-          transaksiSheet.deleteRow(i + 1);
-          console.log('deleteTagihan: Deleted transaction at row ' + (i + 1));
-        }
-      }
-    }
-    
-    // Then, delete the tagihan itself
-    const tagihanData = tagihanSheet.getDataRange().getValues();
-    
-    for (let i = 1; i < tagihanData.length; i++) {
-      if (StringUtils.equals(tagihanData[i][COLUMNS.TAGIHAN.ID], tagihanId)) {
-        tagihanSheet.deleteRow(i + 1);
-        console.log('deleteTagihan: Deleted tagihan ' + tagihanId);
-        return { success: true, message: 'Tagihan berhasil dihapus' };
-      }
-    }
-    
-    return { success: false, message: 'Tagihan tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('deleteTagihan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.deleteTagihan(tagihanId);
 }
 
-/**
- * Delete all tagihan for a rumah in a specific year
- * Useful for regenerating all tagihan
- * @param {string} rumahId - Rumah ID
- * @param {number} tahun - Year
- * @return {Object} Result
- */
 function deleteAllTagihanByRumahTahun(rumahId, tahun) {
-  try {
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    const transaksiSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    
-    if (!tagihanSheet) {
-      return { success: false, message: 'Sheet not found' };
-    }
-    
-    const tagihanData = tagihanSheet.getDataRange().getValues();
-    let deletedCount = 0;
-    
-    // Collect tagihan IDs to delete
-    const tagihanIds = [];
-    for (let i = 1; i < tagihanData.length; i++) {
-      const row = tagihanData[i];
-      if (StringUtils.equals(row[COLUMNS.TAGIHAN.RUMAH_ID], rumahId) && 
-          row[COLUMNS.TAGIHAN.TAHUN] == tahun &&
-          StringUtils.clean(row[COLUMNS.TAGIHAN.TIPE]) === 'Iuran') {
-        tagihanIds.push({
-          id: StringUtils.clean(row[COLUMNS.TAGIHAN.ID]),
-          rowIndex: i
-        });
-      }
-    }
-    
-    // Delete related transactions first
-    if (transaksiSheet && tagihanIds.length > 0) {
-      const transaksiData = transaksiSheet.getDataRange().getValues();
-      for (let i = transaksiData.length - 1; i >= 1; i--) {
-        const linkedId = StringUtils.clean(transaksiData[i][COLUMNS.TRANSAKSI.TAGIHAN_ID]);
-        if (tagihanIds.some(t => t.id === linkedId)) {
-          transaksiSheet.deleteRow(i + 1);
-        }
-      }
-    }
-    
-    // Delete tagihan rows (in reverse order to maintain indices)
-    tagihanIds.sort((a, b) => b.rowIndex - a.rowIndex);
-    for (const tagihan of tagihanIds) {
-      tagihanSheet.deleteRow(tagihan.rowIndex + 1);
-      deletedCount++;
-    }
-    
-    return { 
-      success: true, 
-      message: 'Berhasil menghapus ' + deletedCount + ' tagihan',
-      count: deletedCount
-    };
-    
-  } catch (error) {
-    console.error('deleteAllTagihanByRumahTahun error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.deleteAllByRumahTahun(rumahId, tahun);
 }
 
-/**
- * Recalculate ALL tagihan - useful for batch sync
- * Jalankan fungsi ini jika Anda menghapus transaksi langsung dari sheet
- */
 function recalculateAllTagihan() {
-  try {
-    const tagihanSheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TAGIHAN_BULANAN);
-    if (!tagihanSheet) return { success: false, message: 'Sheet not found' };
-    
-    const data = tagihanSheet.getDataRange().getValues();
-    var count = 0;
-    
-    for (var i = 1; i < data.length; i++) {
-      var tagihanId = data[i][COLUMNS.TAGIHAN.ID];
-      if (tagihanId) {
-        recalculateTagihanTerbayar(tagihanId);
-        count++;
-      }
-    }
-    
-    console.log('recalculateAllTagihan: Recalculated ' + count + ' tagihan');
-    return { success: true, message: 'Recalculated ' + count + ' tagihan', count: count };
-    
-  } catch (error) {
-    console.error('recalculateAllTagihan error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Tagihan.recalculateAllTerbayar();
 }
 
-/**
- * Helper: Convert row to transaksi object
- */
-function mapRowToTransaksi(row, rowIndex) {
-  const nominal = NumberUtils.toNumber(row[COLUMNS.TRANSAKSI.NOMINAL]);
-  const tanggal = row[COLUMNS.TRANSAKSI.TANGGAL];
-  
-  var tanggalStr = '';
-  var tanggalFormatted = '-';
-  
-  if (tanggal) {
-    if (tanggal instanceof Date) {
-      tanggalStr = Utilities.formatDate(tanggal, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      tanggalFormatted = Utilities.formatDate(tanggal, Session.getScriptTimeZone(), 'dd/MM/yyyy');
-    } else {
-      tanggalStr = String(tanggal);
-      tanggalFormatted = tanggalStr;
-    }
-  }
-  
-  return {
-    transaksiId: StringUtils.clean(row[COLUMNS.TRANSAKSI.ID]),
-    tanggal: tanggalStr,
-    tanggalFormatted: tanggalFormatted,
-    jenis: StringUtils.clean(row[COLUMNS.TRANSAKSI.JENIS]),
-    kategoriId: StringUtils.clean(row[COLUMNS.TRANSAKSI.KATEGORI_ID]),
-    namaKategori: StringUtils.clean(row[COLUMNS.TRANSAKSI.NAMA_KATEGORI]),
-    nominal: nominal,
-    nominalFormatted: 'Rp ' + nominal.toLocaleString('id-ID'),
-    keterangan: StringUtils.clean(row[COLUMNS.TRANSAKSI.KETERANGAN]),
-    tagihanId: StringUtils.clean(row[COLUMNS.TRANSAKSI.TAGIHAN_ID]),
-    rumahId: StringUtils.clean(row[COLUMNS.TRANSAKSI.RUMAH_ID]),
-    userInput: StringUtils.clean(row[COLUMNS.TRANSAKSI.USER_INPUT]),
-    metodePembayaran: StringUtils.clean(row[COLUMNS.TRANSAKSI.METODE_PEMBAYARAN] || ''),
-    rowIndex: rowIndex
-  };
-}
 /**
  * =====================================================
  * TEST FUNCTIONS - Tambahkan di akhir Main.gs
@@ -2527,14 +1507,14 @@ function mapRowToTransaksi(row, rowIndex) {
  */
 function testGetTransaksiByRumahId() {
   console.log('=== TEST getTransaksiByRumahId ===');
-  
+
   // Test dengan Teratai 16 (RM000000008)
   const rumahId = 'RM000000008';
   console.log('Testing with rumahId:', rumahId);
-  
+
   const result = getTransaksiByRumahId(rumahId);
   console.log('Result:', JSON.stringify(result, null, 2));
-  
+
   if (result.success && result.data.length > 0) {
     console.log('✅ SUCCESS! Found', result.data.length, 'transactions');
     result.data.forEach(t => {
@@ -2545,7 +1525,7 @@ function testGetTransaksiByRumahId() {
   } else {
     console.log('❌ FAILED:', result.message);
   }
-  
+
   return result;
 }
 
@@ -2555,17 +1535,17 @@ function testGetTransaksiByRumahId() {
 function testTransaksiColumns() {
   console.log('=== TEST COLUMNS.TRANSAKSI ===');
   console.log('RUMAH_ID index:', COLUMNS.TRANSAKSI.RUMAH_ID);
-  
+
   const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
   if (!sheet) {
     console.log('❌ Sheet not found');
     return;
   }
-  
+
   const headers = sheet.getRange(1, 1, 1, 11).getValues()[0];
   console.log('Actual headers:', headers);
   console.log('Header at index 8:', headers[8]);
-  
+
   // Check first data row
   const firstRow = sheet.getRange(2, 1, 1, 11).getValues()[0];
   console.log('First row data:', firstRow);
@@ -2577,21 +1557,21 @@ function testTransaksiColumns() {
  */
 function testListRumahInTransaksi() {
   console.log('=== LIST RUMAH_ID in TRANSAKSI_KAS ===');
-  
+
   const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
   if (!sheet) {
     console.log('❌ Sheet not found');
     return;
   }
-  
+
   const data = sheet.getDataRange().getValues();
   const rumahIds = new Set();
-  
+
   for (let i = 1; i < data.length; i++) {
     const rumahId = StringUtils.clean(data[i][COLUMNS.TRANSAKSI.RUMAH_ID]);
     if (rumahId) rumahIds.add(rumahId);
   }
-  
+
   console.log('Unique Rumah_IDs:', Array.from(rumahIds));
   console.log('Total:', rumahIds.size, 'rumah have transactions');
 }
@@ -2613,202 +1593,24 @@ function testListRumahInTransaksi() {
 // =====================================================
 // 1. UPDATE TRANSAKSI (EDIT)
 // =====================================================
-/**
- * Update existing transaksi
- * @param {string} transaksiId - ID transaksi yang akan diubah
- * @param {Object} data - Data baru
- * @return {Object} Result
- */
 function updateTransaksi(transaksiId, data) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet Transaksi_Kas tidak ditemukan' };
-    
-    const sheetData = sheet.getDataRange().getValues();
-    
-    for (let i = 1; i < sheetData.length; i++) {
-      if (StringUtils.equals(sheetData[i][COLUMNS.TRANSAKSI.ID], transaksiId)) {
-        const row = i + 1;
-        const oldNominal = NumberUtils.toNumber(sheetData[i][COLUMNS.TRANSAKSI.NOMINAL]);
-        const oldTagihanId = StringUtils.clean(sheetData[i][COLUMNS.TRANSAKSI.TAGIHAN_ID]);
-        
-        // Get kategori name if kategoriId provided
-        var namaKategori = data.namaKategori || '';
-        if (data.kategoriId) {
-          var kategoriList = getAllKategoriPembukuan();
-          if (Array.isArray(kategoriList)) {
-            var kat = kategoriList.find(function(k) { return k.kategoriId === data.kategoriId; });
-            if (kat) namaKategori = kat.namaKategori;
-          } else if (kategoriList && kategoriList.data) {
-            var kat = kategoriList.data.find(function(k) { return k.kategoriId === data.kategoriId; });
-            if (kat) namaKategori = kat.namaKategori;
-          }
-        }
-        
-        var nominal = NumberUtils.toNumber(data.nominal);
-        if (nominal <= 0) return { success: false, message: 'Nominal harus lebih dari 0' };
-        
-        // Update fields
-        if (data.tanggal) sheet.getRange(row, COLUMNS.TRANSAKSI.TANGGAL + 1).setValue(data.tanggal);
-        if (data.jenis) sheet.getRange(row, COLUMNS.TRANSAKSI.JENIS + 1).setValue(data.jenis);
-        if (data.kategoriId !== undefined) sheet.getRange(row, COLUMNS.TRANSAKSI.KATEGORI_ID + 1).setValue(data.kategoriId || '');
-        if (namaKategori !== undefined) sheet.getRange(row, COLUMNS.TRANSAKSI.NAMA_KATEGORI + 1).setValue(namaKategori);
-        sheet.getRange(row, COLUMNS.TRANSAKSI.NOMINAL + 1).setValue(nominal);
-        if (data.keterangan !== undefined) sheet.getRange(row, COLUMNS.TRANSAKSI.KETERANGAN + 1).setValue(data.keterangan || '');
-        
-        // Update Metode Pembayaran
-        if (data.metodePembayaran !== undefined) {
-          sheet.getRange(row, COLUMNS.TRANSAKSI.METODE_PEMBAYARAN + 1).setValue(data.metodePembayaran || '');
-        }
-        
-        // Recalculate linked tagihan if nominal or date changed
-        if (oldTagihanId && (oldNominal !== nominal || data.tanggal)) {
-          recalculateTagihanTerbayar(oldTagihanId);
-        }
-        
-        return { success: true, message: 'Transaksi berhasil diperbarui' };
-      }
-    }
-    
-    return { success: false, message: 'Transaksi tidak ditemukan' };
-    
-  } catch (error) {
-    console.error('updateTransaksi error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.update(transaksiId, data);
 }
 
 
 // =====================================================
 // 2. CREATE TRANSAKSI MANUAL (Pemasukan / Pengeluaran)
 // =====================================================
-/**
- * Create manual transaksi (both Pemasukan and Pengeluaran)
- * Different from createTransaksiPembayaran which is linked to tagihan
- * @param {Object} data - { jenis, tanggal, kategoriId, nominal, keterangan }
- * @return {Object} Result
- */
 function createTransaksiManual(data) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet Transaksi_Kas tidak ditemukan' };
-    
-    const jenis = data.jenis || 'Pengeluaran';
-    if (jenis !== 'Pemasukan' && jenis !== 'Pengeluaran') {
-      return { success: false, message: 'Jenis harus Pemasukan atau Pengeluaran' };
-    }
-    
-    const nominal = NumberUtils.toNumber(data.nominal);
-    if (nominal <= 0) return { success: false, message: 'Nominal harus lebih dari 0' };
-    
-    // Get kategori name
-    var namaKategori = '';
-    if (data.kategoriId) {
-      var kategoriList = getAllKategoriPembukuan();
-      if (Array.isArray(kategoriList)) {
-        var kat = kategoriList.find(function(k) { return k.kategoriId === data.kategoriId; });
-        if (kat) namaKategori = kat.namaKategori;
-      } else if (kategoriList && kategoriList.data) {
-        var kat = kategoriList.data.find(function(k) { return k.kategoriId === data.kategoriId; });
-        if (kat) namaKategori = kat.namaKategori;
-      }
-    }
-    
-    // Generate ID
-    const sheetData = sheet.getDataRange().getValues();
-    let maxNum = 0;
-    for (let i = 1; i < sheetData.length; i++) {
-      const id = String(sheetData[i][COLUMNS.TRANSAKSI.ID] || '');
-      const num = parseInt(id.replace('TR', ''));
-      if (!isNaN(num) && num > maxNum) maxNum = num;
-    }
-    const transaksiId = 'TR' + String(maxNum + 1).padStart(9, '0');
-    
-    const now = new Date();
-    
-    const rowData = [
-      transaksiId,
-      data.tanggal || DateUtils.formatDate(now),
-      jenis,
-      data.kategoriId || '',
-      namaKategori,
-      nominal,
-      data.keterangan || '',
-      '',  // Tagihan_ID
-      '',  // Rumah_ID
-      data.userInput || 'admin',
-      DateUtils.formatDateTime(now),
-      data.metodePembayaran || ''  // L: Metode_Pembayaran
-    ];
-    
-    sheet.appendRow(rowData);
-    
-    return { 
-      success: true, 
-      transaksiId: transaksiId, 
-      message: jenis + ' berhasil dicatat' 
-    };
-    
-  } catch (error) {
-    console.error('createTransaksiManual error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.createManual(data);
 }
 
 
 // =====================================================
 // 3. GET TRANSAKSI SUMMARY BY MONTH
 // =====================================================
-/**
- * Get monthly summary of transaksi for a given year
- * @param {number} tahun - Year to summarize
- * @return {Object} Monthly summary
- */
 function getTransaksiSummaryByMonth(tahun) {
-  try {
-    const sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) return { success: false, message: 'Sheet not found', data: [] };
-    
-    const data = sheet.getDataRange().getValues();
-    const monthlyData = {};
-    
-    // Initialize all months
-    for (let m = 1; m <= 12; m++) {
-      monthlyData[m] = { bulan: m, pemasukan: 0, pengeluaran: 0, saldo: 0 };
-    }
-    
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row[COLUMNS.TRANSAKSI.ID]) continue;
-      
-      const tanggal = new Date(row[COLUMNS.TRANSAKSI.TANGGAL]);
-      if (isNaN(tanggal.getTime())) continue;
-      
-      const year = tanggal.getFullYear();
-      if (tahun && year !== parseInt(tahun)) continue;
-      
-      const month = tanggal.getMonth() + 1;
-      const jenis = StringUtils.clean(row[COLUMNS.TRANSAKSI.JENIS]);
-      const nominal = NumberUtils.toNumber(row[COLUMNS.TRANSAKSI.NOMINAL]);
-      
-      if (jenis === 'Pemasukan') {
-        monthlyData[month].pemasukan += nominal;
-      } else {
-        monthlyData[month].pengeluaran += nominal;
-      }
-      monthlyData[month].saldo = monthlyData[month].pemasukan - monthlyData[month].pengeluaran;
-    }
-    
-    return { 
-      success: true, 
-      data: Object.values(monthlyData),
-      tahun: tahun || new Date().getFullYear()
-    };
-    
-  } catch (error) {
-    console.error('getTransaksiSummaryByMonth error:', error);
-    return { success: false, message: error.message, data: [] };
-  }
+  return Service_Transaksi.getSummaryByMonth(tahun);
 }
 
 /**
@@ -2821,11 +1623,11 @@ function getTransaksiSummaryByMonth(tahun) {
 
 function testMetodePembayaran() {
   console.log('=== Test Metode Pembayaran ===\n');
-  
+
   // 1. Cek COLUMNS mapping
   console.log('COLUMNS.TRANSAKSI.METODE_PEMBAYARAN:', COLUMNS.TRANSAKSI.METODE_PEMBAYARAN);
   console.log('Expected: 11 (kolom L)\n');
-  
+
   // 2. Cek raw data dari sheet
   var sheet = SS.getSheetByName('Transaksi_Kas');
   var data = sheet.getDataRange().getValues();
@@ -2833,28 +1635,28 @@ function testMetodePembayaran() {
   console.log('Header row:', JSON.stringify(data[0]));
   console.log('Row 2 kolom L (index 11):', data[1][11]);
   console.log('');
-  
-  // 3. Cek via rowToTransaksi
-  var transaksi = mapRowToTransaksi(data[1], 2);
-  console.log('rowToTransaksi result:');
+
+  // 3. Cek via Model_Transaksi.mapRowToTransaksi
+  var transaksi = Model_Transaksi.mapRowToTransaksi(data[1], 2);
+  console.log('mapRowToTransaksi result:');
   console.log('  transaksiId:', transaksi.transaksiId);
   console.log('  keterangan:', transaksi.keterangan);
   console.log('  metodePembayaran:', transaksi.metodePembayaran);
   console.log('');
-  
+
   // 4. Cek via getAllTransaksi
   var result = fetchAllTransaksi({});
   if (result.data && result.data.length > 0) {
     console.log('getAllTransaksi total:', result.data.length);
     console.log('  metodePembayaran:', result.data[0].metodePembayaran);
   }
-  
+
   // 5. Cek semua metode
-  result.data.forEach(function(t) {
+  result.data.forEach(function (t) {
     if (t.metodePembayaran) {
       console.log(t.transaksiId + ': ' + t.metodePembayaran);
     }
-  });    
+  });
   console.log('\n=== Test Complete ===');
 }
 
@@ -2862,16 +1664,16 @@ function testMetode2() {
   var sheet = SS.getSheetByName('Transaksi_Kas');
   var data = sheet.getDataRange().getValues();
   var row = data[1];
-  
+
   console.log('row.length:', row.length);
   console.log('row[11] direct:', row[11]);
   console.log('COLUMNS.TRANSAKSI.METODE_PEMBAYARAN:', COLUMNS.TRANSAKSI.METODE_PEMBAYARAN);
   console.log('row[COLUMNS.TRANSAKSI.METODE_PEMBAYARAN]:', row[COLUMNS.TRANSAKSI.METODE_PEMBAYARAN]);
-  
+
   // Bypass StringUtils
   var metode = String(row[11] || '');
   console.log('String(row[11]):', metode);
-  
+
   // Test StringUtils
   var metode2 = StringUtils.clean(row[11]);
   console.log('StringUtils.clean(row[11]):', metode2);
@@ -2890,10 +1692,10 @@ function loadConfigRT() {
     if (!sheet) {
       return { success: false, message: 'Sheet Config_RT not found' };
     }
-    
+
     var data = sheet.getDataRange().getValues();
     var config = {};
-    
+
     for (var i = 1; i < data.length; i++) {
       var key = String(data[i][0] || '').trim();
       var value = data[i][1];
@@ -2901,9 +1703,9 @@ function loadConfigRT() {
         config[key] = value !== null && value !== undefined ? String(value) : '';
       }
     }
-    
+
     return { success: true, data: config };
-    
+
   } catch (error) {
     console.error('loadConfigRT error:', error);
     return { success: false, message: error.message };
@@ -2915,52 +1717,5 @@ function loadConfigRT() {
  * @param {number} tahun - Year to summarize
  */
 function loadMonthlySummary(tahun) {
-  try {
-    var sheet = SS.getSheetByName(CONFIG.SHEET_NAMES.TRANSAKSI_KAS);
-    if (!sheet) {
-      return { success: false, message: 'Sheet Transaksi_Kas not found' };
-    }
-    
-    var data = sheet.getDataRange().getValues();
-    
-    // Initialize 12 months
-    var months = [];
-    for (var m = 1; m <= 12; m++) {
-      months.push({
-        bulan: m,
-        namaBulan: DateUtils.getMonthName(m),
-        pemasukan: 0,
-        pengeluaran: 0
-      });
-    }
-    
-    // Sum by month
-    for (var i = 1; i < data.length; i++) {
-      var row = data[i];
-      if (!row[COLUMNS.TRANSAKSI.ID]) continue;
-      
-      var tanggal = row[COLUMNS.TRANSAKSI.TANGGAL];
-      if (!tanggal) continue;
-      
-      var d = tanggal instanceof Date ? tanggal : new Date(tanggal);
-      if (isNaN(d.getTime())) continue;
-      if (d.getFullYear() !== tahun) continue;
-      
-      var bulanIdx = d.getMonth(); // 0-based
-      var jenis = String(row[COLUMNS.TRANSAKSI.JENIS] || '').trim();
-      var nominal = NumberUtils.toNumber(row[COLUMNS.TRANSAKSI.NOMINAL]);
-      
-      if (jenis === 'Pemasukan') {
-        months[bulanIdx].pemasukan += nominal;
-      } else if (jenis === 'Pengeluaran') {
-        months[bulanIdx].pengeluaran += nominal;
-      }
-    }
-    
-    return { success: true, data: months };
-    
-  } catch (error) {
-    console.error('loadMonthlySummary error:', error);
-    return { success: false, message: error.message };
-  }
+  return Service_Transaksi.getSummaryByMonth(tahun);
 }
